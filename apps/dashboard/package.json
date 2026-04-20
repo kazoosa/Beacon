@@ -10,7 +10,6 @@
     "typecheck": "tsc -b --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@finlink/shared": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.1",
     "@radix-ui/react-dropdown-menu": "^2.1.1",
     "@radix-ui/react-tabs": "^1.1.0",

@@ -1,9 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "build": { "env": { "NODE_VERSION": "20" } },
-  "buildCommand": "cd ../.. && pnpm --filter @finlink/shared build && pnpm --filter @finlink/link-ui build",
+  "buildCommand": "npx vite build && npx vite build --config vite.sdk.config.ts",
   "outputDirectory": "dist",
-  "installCommand": "cd ../.. && corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install --no-frozen-lockfile",
+  "installCommand": "npm install --legacy-peer-deps --no-audit --no-fund",
   "framework": null,
   "headers": [
     {
