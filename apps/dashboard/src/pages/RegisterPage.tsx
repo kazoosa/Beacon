@@ -37,16 +37,19 @@ export function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base">
       <form onSubmit={submit} className="card w-full max-w-sm p-8">
         <div className="flex items-center gap-2 mb-8">
-          <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-green to-emerald-700 inline-flex items-center justify-center text-bg-base text-sm font-bold">
-            $
+          <span
+            className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-white text-sm font-bold shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset,0_4px_12px_-4px_rgba(124,106,255,0.5)]"
+            style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #5b8def 100%)" }}
+          >
+            {APP_NAME[0]}
           </span>
           <div className="flex flex-col leading-tight">
-            <span className="font-semibold text-white">{APP_NAME}</span>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Portfolio</span>
+            <span className="font-semibold text-fg-primary">{APP_NAME}</span>
+            <span className="text-[10px] text-fg-muted uppercase tracking-wider">Portfolio</span>
           </div>
         </div>
-        <h1 className="text-xl font-semibold text-white mb-1">Create account</h1>
-        <p className="text-sm text-slate-400 mb-6">Start tracking your portfolio</p>
+        <h1 className="text-xl font-semibold text-fg-primary mb-1">Create account</h1>
+        <p className="text-sm text-fg-secondary mb-6">Start tracking your portfolio</p>
 
         <Field label="Name" error={fields.name}>
           <input className="input" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -74,7 +77,7 @@ export function RegisterPage() {
         <button type="submit" className="btn-primary w-full justify-center" disabled={busy}>
           {busy ? "Creating…" : "Create account"}
         </button>
-        <div className="text-xs text-slate-500 mt-4 text-center">
+        <div className="text-xs text-fg-muted mt-4 text-center">
           Already have an account?{" "}
           <Link to="/login" className="text-accent-green hover:underline">
             Sign in
@@ -98,12 +101,12 @@ function Field({
 }) {
   return (
     <div className="mb-3">
-      <label className="block text-xs font-medium text-slate-400 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-fg-secondary mb-1">{label}</label>
       {children}
       {error ? (
         <div className="text-xs text-rose-400 mt-1">{error}</div>
       ) : hint ? (
-        <div className="text-xs text-slate-500 mt-1">{hint}</div>
+        <div className="text-xs text-fg-muted mt-1">{hint}</div>
       ) : null}
     </div>
   );

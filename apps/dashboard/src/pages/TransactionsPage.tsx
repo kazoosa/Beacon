@@ -60,8 +60,8 @@ export function TransactionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">Transactions</h1>
-          <p className="text-xs text-slate-500 mt-1">{rows.length} transactions</p>
+          <h1 className="text-xl font-semibold text-fg-primary">Transactions</h1>
+          <p className="text-xs text-fg-muted mt-1">{rows.length} transactions</p>
         </div>
       </div>
 
@@ -73,13 +73,13 @@ export function TransactionsPage() {
 
       <div className="card p-4 flex flex-wrap items-end gap-3">
         <div>
-          <div className="text-[10px] text-slate-500 uppercase mb-1">Type</div>
+          <div className="text-[10px] text-fg-muted uppercase mb-1">Type</div>
           <div className="flex gap-1 flex-wrap">
             {TYPES.map((t) => (
               <button
                 key={t}
                 onClick={() => setType(t)}
-                className={`btn-ghost text-xs ${type === t ? "bg-bg-hover text-white" : ""}`}
+                className={`btn-ghost text-xs ${type === t ? "bg-bg-hover text-fg-primary" : ""}`}
               >
                 {t}
               </button>
@@ -87,7 +87,7 @@ export function TransactionsPage() {
           </div>
         </div>
         <div className="flex-1 min-w-[200px]">
-          <div className="text-[10px] text-slate-500 uppercase mb-1">Ticker</div>
+          <div className="text-[10px] text-fg-muted uppercase mb-1">Ticker</div>
           <input
             className="input"
             placeholder="AAPL, SPY, ..."
@@ -96,7 +96,7 @@ export function TransactionsPage() {
           />
         </div>
         <div>
-          <div className="text-[10px] text-slate-500 uppercase mb-1">Brokerage</div>
+          <div className="text-[10px] text-fg-muted uppercase mb-1">Brokerage</div>
           <select
             className="input"
             value={inst}
@@ -128,44 +128,44 @@ export function TransactionsPage() {
           <tbody>
             {rows.map((t) => (
               <tr key={t.id}>
-                <td className="text-xs text-slate-400 font-num">{t.date}</td>
+                <td className="text-xs text-fg-secondary font-num">{t.date}</td>
                 <td>
                   <TxBadge type={t.type} />
                 </td>
                 <td>
-                  <div className="font-num text-white text-sm">{t.ticker_symbol}</div>
-                  <div className="text-[10px] text-slate-500 truncate max-w-[180px]">
+                  <div className="font-num text-fg-primary text-sm">{t.ticker_symbol}</div>
+                  <div className="text-[10px] text-fg-muted truncate max-w-[180px]">
                     {t.security_name}
                   </div>
                 </td>
                 <td>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-300">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
                     <span
                       className="w-2 h-2 rounded-full"
                       style={{ backgroundColor: t.institution_color }}
                     />
                     {t.institution}
                   </span>
-                  <div className="text-[10px] text-slate-500">{t.account_name}</div>
+                  <div className="text-[10px] text-fg-muted">{t.account_name}</div>
                 </td>
-                <td className="text-right font-num text-slate-300">
+                <td className="text-right font-num text-fg-secondary">
                   {t.quantity ? t.quantity.toFixed(4) : "—"}
                 </td>
-                <td className="text-right font-num text-slate-400">
+                <td className="text-right font-num text-fg-secondary">
                   {t.price ? fmtUsd(t.price) : "—"}
                 </td>
                 <td className="text-right font-num">
                   {t.type === "dividend" || t.type === "interest" || t.type === "sell" ? (
                     <span className="pos">+{fmtUsd(t.amount)}</span>
                   ) : (
-                    <span className="text-slate-300">{fmtUsd(t.amount)}</span>
+                    <span className="text-fg-secondary">{fmtUsd(t.amount)}</span>
                   )}
                 </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center text-slate-500 py-10">
+                <td colSpan={7} className="text-center text-fg-muted py-10">
                   No transactions match your filters.
                 </td>
               </tr>
@@ -180,8 +180,8 @@ export function TransactionsPage() {
 function SummaryCard({ label, value, color }: { label: string; value: number; color?: "pos" }) {
   return (
     <div className="card p-4">
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</div>
-      <div className={`font-num text-xl mt-1 ${color === "pos" ? "pos" : "text-white"}`}>
+      <div className="text-[10px] text-fg-muted uppercase tracking-wider">{label}</div>
+      <div className={`font-num text-xl mt-1 ${color === "pos" ? "pos" : "text-fg-primary"}`}>
         {fmtUsd(value)}
       </div>
     </div>

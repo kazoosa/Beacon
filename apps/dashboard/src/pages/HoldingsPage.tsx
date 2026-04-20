@@ -47,8 +47,8 @@ export function HoldingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Holdings</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-xl font-semibold text-fg-primary">Holdings</h1>
+          <p className="text-xs text-fg-muted mt-1">
             {q.data?.holdings.length ?? 0} positions · Consolidated across all connected brokerages
           </p>
         </div>
@@ -56,7 +56,7 @@ export function HoldingsPage() {
           {(["value", "pl", "weight", "ticker"] as const).map((k) => (
             <button
               key={k}
-              className={`btn-ghost ${sort === k ? "bg-bg-hover text-white" : ""}`}
+              className={`btn-ghost ${sort === k ? "bg-bg-hover text-fg-primary" : ""}`}
               onClick={() => setSort(k)}
             >
               {k === "ticker" ? "A–Z" : k === "pl" ? "P/L %" : k === "weight" ? "Weight" : "Value"}
@@ -92,15 +92,15 @@ export function HoldingsPage() {
                       setExpanded(expanded === h.ticker_symbol ? null : h.ticker_symbol)
                     }
                   >
-                    <td className="text-slate-600 text-xs">
+                    <td className="text-fg-fainter text-xs">
                       {expanded === h.ticker_symbol ? "▾" : "▸"}
                     </td>
-                    <td className="font-num text-white font-semibold">{h.ticker_symbol}</td>
-                    <td className="text-xs text-slate-400 max-w-[220px] truncate">{h.name}</td>
-                    <td className="text-right font-num text-slate-300">{h.quantity.toFixed(4)}</td>
-                    <td className="text-right font-num text-slate-400">{fmtUsd(h.avg_cost)}</td>
-                    <td className="text-right font-num text-slate-300">{fmtUsd(h.close_price)}</td>
-                    <td className="text-right font-num text-white">{fmtUsd(h.market_value)}</td>
+                    <td className="font-num text-fg-primary font-semibold">{h.ticker_symbol}</td>
+                    <td className="text-xs text-fg-secondary max-w-[220px] truncate">{h.name}</td>
+                    <td className="text-right font-num text-fg-secondary">{h.quantity.toFixed(4)}</td>
+                    <td className="text-right font-num text-fg-secondary">{fmtUsd(h.avg_cost)}</td>
+                    <td className="text-right font-num text-fg-secondary">{fmtUsd(h.close_price)}</td>
+                    <td className="text-right font-num text-fg-primary">{fmtUsd(h.market_value)}</td>
                     <td className={`text-right font-num ${plColor}`}>
                       {fmtUsd(h.unrealized_pl, { showSign: true })}
                       <div className="text-xs">{fmtPct(h.unrealized_pl_pct, { showSign: true })}</div>
@@ -113,7 +113,7 @@ export function HoldingsPage() {
                             style={{ width: `${Math.min(100, h.weight_pct * 2)}%` }}
                           />
                         </div>
-                        <span className="font-num text-xs text-slate-400 w-10">
+                        <span className="font-num text-xs text-fg-secondary w-10">
                           {h.weight_pct.toFixed(1)}%
                         </span>
                       </div>
@@ -124,7 +124,7 @@ export function HoldingsPage() {
                       <td></td>
                       <td colSpan={8} className="bg-bg-base/60">
                         <div className="py-2">
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
+                          <div className="text-[10px] text-fg-muted uppercase tracking-wider mb-2">
                             Held across
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -138,16 +138,16 @@ export function HoldingsPage() {
                                   style={{ backgroundColor: l.institution_color }}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-white truncate">{l.institution}</div>
-                                  <div className="text-[10px] text-slate-500 truncate">
+                                  <div className="text-xs text-fg-primary truncate">{l.institution}</div>
+                                  <div className="text-[10px] text-fg-muted truncate">
                                     {l.account_name}
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <div className="font-num text-xs text-slate-300">
+                                  <div className="font-num text-xs text-fg-secondary">
                                     {l.quantity.toFixed(2)}
                                   </div>
-                                  <div className="font-num text-[10px] text-slate-500">
+                                  <div className="font-num text-[10px] text-fg-muted">
                                     {fmtUsd(l.value, { decimals: 0 })}
                                   </div>
                                 </div>
@@ -163,7 +163,7 @@ export function HoldingsPage() {
             })}
             {q.isSuccess && sorted.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center text-slate-500 py-10">
+                <td colSpan={9} className="text-center text-fg-muted py-10">
                   No holdings yet. Connect a brokerage to get started.
                 </td>
               </tr>

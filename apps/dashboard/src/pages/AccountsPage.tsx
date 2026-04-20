@@ -60,15 +60,15 @@ export function AccountsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Connected accounts</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-xl font-semibold text-fg-primary">Connected accounts</h1>
+          <p className="text-xs text-fg-muted mt-1">
             {groups.size} brokerage{groups.size === 1 ? "" : "s"} · {q.data?.accounts.length ?? 0} accounts
           </p>
         </div>
         <div className="flex items-center gap-2">
           {isDemo && (
             <button
-              className="btn-ghost text-xs text-slate-500"
+              className="btn-ghost text-xs text-fg-muted"
               onClick={() => {
                 if (confirm("Clear all sample / mock brokerages? (Real SnapTrade connections are kept.)"))
                   wipeMock.mutate();
@@ -96,14 +96,14 @@ export function AccountsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <span
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+                    className="w-10 h-10 rounded-lg flex items-center justify-center text-fg-primary text-sm font-bold"
                     style={{ backgroundColor: g.color }}
                   >
                     {g.institution[0]}
                   </span>
                   <div>
-                    <div className="text-sm font-semibold text-white">{g.institution}</div>
-                    <div className="text-[10px] text-slate-500 font-mono">item: {itemId.slice(-12)}</div>
+                    <div className="text-sm font-semibold text-fg-primary">{g.institution}</div>
+                    <div className="text-[10px] text-fg-muted font-mono">item: {itemId.slice(-12)}</div>
                   </div>
                 </div>
                 <button
@@ -122,24 +122,24 @@ export function AccountsPage() {
                     className="flex items-center justify-between py-2 border-b border-border-subtle/50 last:border-0"
                   >
                     <div>
-                      <div className="text-sm text-white">{a.name}</div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-sm text-fg-primary">{a.name}</div>
+                      <div className="text-[10px] text-fg-muted">
                         {a.subtype} · ···{a.mask}
                       </div>
                     </div>
-                    <div className="font-num text-sm text-white">{fmtUsd(a.current_balance)}</div>
+                    <div className="font-num text-sm text-fg-primary">{fmtUsd(a.current_balance)}</div>
                   </div>
                 ))}
               </div>
               <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between">
-                <span className="text-xs text-slate-500">Total value</span>
-                <span className="font-num text-white">{fmtUsd(total)}</span>
+                <span className="text-xs text-fg-muted">Total value</span>
+                <span className="font-num text-fg-primary">{fmtUsd(total)}</span>
               </div>
             </div>
           );
         })}
         {groups.size === 0 && (
-          <div className="md:col-span-2 card p-10 text-center text-slate-400 text-sm">
+          <div className="md:col-span-2 card p-10 text-center text-fg-secondary text-sm">
             No brokerages connected. Use "+ Connect brokerage" in the sidebar.
           </div>
         )}

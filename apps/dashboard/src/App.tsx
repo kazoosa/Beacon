@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth";
+import { ThemeProvider } from "./lib/theme";
 import { Shell } from "./components/Shell";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -19,8 +20,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export function App() {
   return (
-    <AuthProvider>
-      <Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/" element={<RequireAuth><OverviewPage /></RequireAuth>} />
@@ -30,8 +32,9 @@ export function App() {
         <Route path="/allocation" element={<RequireAuth><AllocationPage /></RequireAuth>} />
         <Route path="/accounts" element={<RequireAuth><AccountsPage /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

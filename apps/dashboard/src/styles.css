@@ -2,12 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Theme tokens — flip via .dark class on <html>
+   Values are "r g b" triplets (space-separated) so Tailwind's
+   <alpha-value> placeholder works for opacity modifiers.
+   ============================================================ */
+
+:root {
+  /* Light theme (Stripe-ish: warm white, soft gray surfaces) */
+  --bg-base: 250 250 252;        /* #FAFAFC */
+  --bg-raised: 255 255 255;      /* #FFFFFF */
+  --bg-overlay: 245 246 250;     /* #F5F6FA */
+  --bg-hover: 239 241 246;       /* #EFF1F6 */
+  --bg-inset: 243 244 249;       /* #F3F4F9 */
+
+  --border-subtle: 226 228 236;  /* #E2E4EC */
+  --border-strong: 203 207 219;  /* #CBCFDB */
+
+  --fg-primary: 17 17 27;        /* near-black */
+  --fg-secondary: 68 72 90;      /* body text */
+  --fg-muted: 113 119 138;       /* labels */
+  --fg-fainter: 156 163 182;     /* hints */
+
+  --shadow-card:
+    0 0 0 1px rgba(17, 17, 27, 0.04),
+    0 1px 2px rgba(17, 17, 27, 0.04),
+    0 8px 24px -12px rgba(17, 17, 27, 0.12);
+  --shadow-card-hover:
+    0 0 0 1px rgba(17, 17, 27, 0.08),
+    0 2px 4px rgba(17, 17, 27, 0.06),
+    0 14px 32px -12px rgba(17, 17, 27, 0.18);
+}
+
+.dark {
+  /* Dark theme (sophisticated, not pure black) */
+  --bg-base: 11 11 18;           /* #0B0B12 */
+  --bg-raised: 20 20 29;         /* #14141D */
+  --bg-overlay: 28 28 40;        /* #1C1C28 */
+  --bg-hover: 34 34 47;          /* #22222F */
+  --bg-inset: 15 15 24;          /* #0F0F18 */
+
+  --border-subtle: 38 38 52;     /* subtle outline */
+  --border-strong: 58 58 76;
+
+  --fg-primary: 245 247 252;     /* near-white */
+  --fg-secondary: 196 202 218;   /* body text */
+  --fg-muted: 134 142 162;       /* labels */
+  --fg-fainter: 90 96 112;       /* hints */
+
+  --shadow-card:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 32px -12px rgba(0, 0, 0, 0.6);
+  --shadow-card-hover:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 20px 48px -16px rgba(0, 0, 0, 0.75);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
 html,
 body {
-  background-color: #0a0e1a;
-  color: #e2e8f0;
+  background-color: rgb(var(--bg-base));
+  color: rgb(var(--fg-secondary));
   font-family: "Inter", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss01", "ss03";
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+  color: rgb(var(--fg-primary));
 }
 
 .font-num {
@@ -16,75 +91,140 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* ============================================================
+   Components
+   ============================================================ */
+
 .card {
-  @apply bg-bg-raised rounded-xl border border-border-subtle shadow-card;
+  @apply bg-bg-raised rounded-xl shadow-card relative;
 }
+
 .card-hover {
-  @apply card hover:bg-bg-hover transition;
+  @apply card transition-all duration-200 hover:shadow-card-hover;
 }
+
+/* Buttons */
 .btn {
-  @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition;
+  @apply inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
 }
+
 .btn-primary {
-  @apply btn bg-accent-green text-bg-base hover:bg-emerald-400;
+  @apply btn text-white shadow-[0_1px_0_rgba(255,255,255,0.15)_inset,0_0_0_1px_rgba(124,106,255,0.4),0_4px_16px_-4px_rgba(124,106,255,0.45)] hover:-translate-y-px hover:shadow-[0_1px_0_rgba(255,255,255,0.2)_inset,0_0_0_1px_rgba(124,106,255,0.6),0_6px_20px_-4px_rgba(124,106,255,0.6)];
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c6aff 100%);
 }
+.btn-primary:hover {
+  background: linear-gradient(180deg, #9f75ff 0%, #8575ff 100%);
+}
+
+.btn-secondary {
+  @apply btn bg-bg-overlay text-fg-primary border border-border-subtle hover:bg-bg-hover hover:border-border-strong;
+}
+
 .btn-ghost {
-  @apply btn text-slate-300 hover:bg-bg-hover hover:text-white;
+  @apply btn text-fg-muted hover:bg-bg-hover hover:text-fg-primary;
 }
+
 .btn-danger {
-  @apply btn bg-rose-950 text-rose-300 hover:bg-rose-900 border border-rose-900;
+  @apply btn text-rose-500 dark:text-rose-300 border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40;
 }
+
+/* Inputs */
 .input {
-  @apply w-full rounded-lg border border-border-strong bg-bg-overlay px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent-green focus:ring-2 focus:ring-accent-green/20 placeholder:text-slate-500;
+  @apply w-full rounded-lg bg-bg-inset border border-border-subtle px-3.5 py-2.5 text-sm text-fg-primary placeholder:text-fg-fainter outline-none transition-all duration-150;
+  @apply focus:border-accent-brand/60 focus:ring-4 focus:ring-accent-brand/10 focus:bg-bg-raised;
 }
+
+/* Tables */
 .table {
   @apply w-full text-sm;
 }
 .table th {
-  @apply text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider py-2 px-3 border-b border-border-subtle;
+  @apply text-left text-[10px] font-semibold text-fg-muted uppercase tracking-wider py-3 px-4;
+  border-bottom: 1px solid rgb(var(--border-subtle));
 }
 .table td {
-  @apply py-3 px-3 border-b border-border-subtle/50;
+  @apply py-3.5 px-4 text-fg-secondary;
+  border-bottom: 1px solid rgb(var(--border-subtle) / 0.6);
 }
-.table tr:hover td {
-  @apply bg-bg-hover/40;
+.table tbody tr:last-child td {
+  border-bottom: none;
 }
+.table tbody tr {
+  @apply transition-colors duration-100;
+}
+.table tbody tr:hover td {
+  background: rgb(var(--bg-hover) / 0.6);
+}
+
+/* Badges */
 .badge {
-  @apply inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium font-num;
+  @apply inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold font-num uppercase tracking-wider;
 }
-.badge-gray { @apply badge bg-slate-800 text-slate-300; }
-.badge-green { @apply badge bg-emerald-950 text-emerald-400 border border-emerald-900/50; }
-.badge-red { @apply badge bg-rose-950 text-rose-400 border border-rose-900/50; }
-.badge-amber { @apply badge bg-amber-950 text-amber-400 border border-amber-900/50; }
-.badge-blue { @apply badge bg-sky-950 text-sky-400 border border-sky-900/50; }
-.badge-purple { @apply badge bg-purple-950 text-purple-400 border border-purple-900/50; }
+.badge-gray   { @apply badge bg-slate-200 text-slate-700 dark:bg-slate-800/80 dark:text-slate-300; }
+.badge-green  { @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300; }
+.badge-red    { @apply badge bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300; }
+.badge-amber  { @apply badge bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300; }
+.badge-blue   { @apply badge bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300; }
+.badge-purple { @apply badge bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300; }
 
-.pos { color: #10b981; }
-.neg { color: #ef4444; }
+/* Semantic P/L colors — same in both modes for money convention */
+.pos { color: #059669; }
+.dark .pos { color: #34d399; }
+.neg { color: #dc2626; }
+.dark .neg { color: #f87171; }
 
-/* Thin scrollbars that reserve their own space so they never cover content */
+/* Brand text (gradient fill) */
+.brand-text {
+  background: linear-gradient(135deg, #8b5cf6 0%, #5b8def 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Divider */
+.hr-subtle {
+  height: 1px;
+  border: none;
+  background: linear-gradient(90deg, transparent, rgb(var(--border-subtle)), transparent);
+}
+
+/* ============================================================
+   Scrollbars — subtle, stable (never floats over content)
+   ============================================================ */
+
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+  scrollbar-color: rgb(var(--border-strong) / 0.5) transparent;
 }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgb(var(--border-strong) / 0.4);
   border-radius: 999px;
   transition: background 0.15s;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.4); }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--border-strong) / 0.7); }
 ::-webkit-scrollbar-corner { background: transparent; }
 
-/* Reserve scrollbar space on the page and on any scrollable container —
-   ensures the bar never floats over the last column of a table or the right
-   edge of a legend. */
-html, body {
-  scrollbar-gutter: stable;
-}
+html, body { scrollbar-gutter: stable; }
 [class*="overflow-y-auto"],
 [class*="overflow-auto"],
-[class*="overflow-x-auto"] {
-  scrollbar-gutter: stable;
+[class*="overflow-x-auto"] { scrollbar-gutter: stable; }
+
+/* ============================================================
+   Focus
+   ============================================================ */
+
+*:focus-visible {
+  outline: 2px solid rgba(124, 106, 255, 0.5);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Misc
+   ============================================================ */
+
+.kbd {
+  @apply inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-mono rounded border border-border-subtle bg-bg-inset text-fg-muted;
 }

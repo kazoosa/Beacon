@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
+import { useChartTheme, tooltipProps } from "../lib/chartTheme";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 interface DividendsResp {
@@ -14,23 +15,24 @@ interface DividendsResp {
 export function DividendsPage() {
   const { accessToken } = useAuth();
   const f = apiFetch(() => accessToken);
+  const ct = useChartTheme();
   const q = useQuery({
     queryKey: ["dividends"],
     queryFn: () => f<DividendsResp>("/api/portfolio/dividends"),
   });
 
   if (q.isLoading) {
-    return <div className="text-sm text-slate-500">Loading…</div>;
+    return <div className="text-sm text-fg-muted">Loading…</div>;
   }
 
   if (!q.data || (q.data.lifetime_total === 0 && q.data.by_ticker.length === 0)) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold text-white">Dividends</h1>
+        <h1 className="text-xl font-semibold text-fg-primary">Dividends</h1>
         <div className="card p-10 text-center">
           <div className="text-5xl mb-4">◈</div>
-          <h2 className="text-lg font-semibold text-white mb-2">No dividend income yet</h2>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
+          <h2 className="text-lg font-semibold text-fg-primary mb-2">No dividend income yet</h2>
+          <p className="text-sm text-fg-secondary max-w-md mx-auto">
             Once your connected brokerages pay out dividends or interest, you'll see them here with monthly breakdowns and top payers.
           </p>
         </div>
@@ -42,7 +44,7 @@ export function DividendsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-white">Dividends</h1>
+      <h1 className="text-xl font-semibold text-fg-primary">Dividends</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Stat label="YTD income" value={fmtUsd(q.data.ytd_total)} color="pos" />
@@ -51,36 +53,27 @@ export function DividendsPage() {
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">Monthly income — last 12 months</h3>
+        <h3 className="text-sm font-semibold text-fg-primary mb-4">Monthly income — last 12 months</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={q.data.by_month} margin={{ left: 0, right: 10, top: 10, bottom: 0 }}>
-              <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid stroke={ct.grid} strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="month"
-                tick={{ fontSize: 10, fill: "#64748b" }}
+                tick={{ fontSize: 10, fill: ct.tick }}
                 tickFormatter={(v: string) => {
                   const [y, m] = v.split("-");
                   return `${m}/${y!.slice(-2)}`;
                 }}
-                stroke="#1e293b"
+                stroke={ct.grid}
               />
               <YAxis
-                tick={{ fontSize: 10, fill: "#64748b" }}
-                stroke="#1e293b"
+                tick={{ fontSize: 10, fill: ct.tick }}
+                stroke={ct.grid}
                 tickFormatter={(v: number) => `$${v}`}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#111827",
-                  border: "1px solid #1e293b",
-                  borderRadius: 8,
-                  fontSize: 12,
-                  color: "#e2e8f0",
-                }}
-                itemStyle={{ color: "#e2e8f0" }}
-                labelStyle={{ color: "#94a3b8" }}
-                cursor={{ fill: "#1f2937" }}
+                {...tooltipProps(ct)}
                 formatter={(v: number) => fmtUsd(v)}
               />
               <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -90,7 +83,7 @@ export function DividendsPage() {
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">Top dividend payers</h3>
+        <h3 className="text-sm font-semibold text-fg-primary mb-4">Top dividend payers</h3>
         <div className="space-y-2">
           {q.data.by_ticker.slice(0, 15).map((t) => {
             const pct = (t.total / q.data.by_ticker[0]!.total) * 100;
@@ -99,9 +92,9 @@ export function DividendsPage() {
                 key={t.ticker_symbol}
                 className="flex items-center gap-3 py-2 border-b border-border-subtle/50 last:border-0"
               >
-                <div className="w-14 font-num text-sm text-white">{t.ticker_symbol}</div>
-                <div className="flex-1 text-xs text-slate-400 truncate">{t.name}</div>
-                <div className="text-xs text-slate-500 w-20 text-right">
+                <div className="w-14 font-num text-sm text-fg-primary">{t.ticker_symbol}</div>
+                <div className="flex-1 text-xs text-fg-secondary truncate">{t.name}</div>
+                <div className="text-xs text-fg-muted w-20 text-right">
                   {t.payments} pmts
                 </div>
                 <div className="flex-1 max-w-[240px] h-2 bg-bg-overlay rounded-full overflow-hidden">
@@ -110,14 +103,14 @@ export function DividendsPage() {
                     style={{ width: `${Math.max(4, pct)}%` }}
                   />
                 </div>
-                <div className="w-24 text-right font-num text-sm text-white">
+                <div className="w-24 text-right font-num text-sm text-fg-primary">
                   {fmtUsd(t.total)}
                 </div>
               </div>
             );
           })}
           {q.data.by_ticker.length === 0 && (
-            <div className="text-center text-slate-500 py-6 text-sm">
+            <div className="text-center text-fg-muted py-6 text-sm">
               No dividends yet. Connect a brokerage with dividend-paying holdings.
             </div>
           )}
@@ -130,8 +123,8 @@ export function DividendsPage() {
 function Stat({ label, value, color }: { label: string; value: string; color?: "pos" }) {
   return (
     <div className="card p-5">
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</div>
-      <div className={`font-num text-2xl mt-1 ${color === "pos" ? "pos" : "text-white"}`}>
+      <div className="text-[10px] text-fg-muted uppercase tracking-wider">{label}</div>
+      <div className={`font-num text-2xl mt-1 ${color === "pos" ? "pos" : "text-fg-primary"}`}>
         {value}
       </div>
     </div>

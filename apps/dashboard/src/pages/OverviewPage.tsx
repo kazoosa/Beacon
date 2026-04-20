@@ -3,6 +3,7 @@ import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd, fmtPct, PlText } from "../components/money";
 import { Link } from "react-router-dom";
+import { useChartTheme, tooltipProps } from "../lib/chartTheme";
 import {
   AreaChart,
   Area,
@@ -61,6 +62,7 @@ interface DivResp {
 export function OverviewPage() {
   const { accessToken } = useAuth();
   const f = apiFetch(() => accessToken);
+  const ct = useChartTheme();
 
   const summary = useQuery({ queryKey: ["summary"], queryFn: () => f<Summary>("/api/portfolio/summary") });
   const holdings = useQuery({ queryKey: ["holdings"], queryFn: () => f<HoldingsResp>("/api/portfolio/holdings") });
@@ -76,14 +78,14 @@ export function OverviewPage() {
       <div className="card p-6">
         <div className="flex items-start justify-between gap-6 flex-wrap">
           <div>
-            <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Portfolio value</div>
-            <div className="font-num text-4xl font-semibold text-white">
+            <div className="text-xs text-fg-muted uppercase tracking-wider mb-1">Portfolio value</div>
+            <div className="font-num text-4xl font-semibold text-fg-primary">
               {s ? fmtUsd(s.total_value) : "—"}
             </div>
             {s && !empty && (
               <div className="mt-2 flex items-center gap-3">
                 <PlText value={s.day_change} pct={s.day_change_pct} size="md" />
-                <span className="text-xs text-slate-500">today</span>
+                <span className="text-xs text-fg-muted">today</span>
               </div>
             )}
           </div>
@@ -106,11 +108,11 @@ export function OverviewPage() {
       {empty && (
         <div className="card p-10 text-center">
           <div className="text-5xl mb-4">📈</div>
-          <h2 className="text-xl font-semibold text-white mb-2">Start your portfolio</h2>
-          <p className="text-sm text-slate-400 max-w-md mx-auto mb-5">
-            Use the <span className="text-white font-medium">+ Connect brokerage</span> button in the sidebar to link your first account.
+          <h2 className="text-xl font-semibold text-fg-primary mb-2">Start your portfolio</h2>
+          <p className="text-sm text-fg-secondary max-w-md mx-auto mb-5">
+            Use the <span className="text-fg-primary font-medium">+ Connect brokerage</span> button in the sidebar to link your first account.
           </p>
-          <p className="text-[10px] text-slate-500 mt-4">
+          <p className="text-[10px] text-fg-muted mt-4">
             Your data syncs automatically once connected. Supports Fidelity, Schwab, Robinhood, Vanguard, and 30+ others.
           </p>
         </div>
@@ -122,7 +124,7 @@ export function OverviewPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="card p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-white">Top holdings</h3>
+                <h3 className="text-sm font-semibold text-fg-primary">Top holdings</h3>
                 <Link to="/holdings" className="text-xs text-accent-green hover:underline">
                   See all →
                 </Link>
@@ -133,21 +135,21 @@ export function OverviewPage() {
                     key={h.ticker_symbol}
                     className="flex items-center gap-3 py-2 border-b border-border-subtle/50 last:border-0"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-bg-overlay flex items-center justify-center text-xs font-semibold font-num text-slate-200">
+                    <div className="w-10 h-10 rounded-lg bg-bg-overlay flex items-center justify-center text-xs font-semibold font-num text-fg-primary">
                       {h.ticker_symbol.slice(0, 4)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white font-medium truncate">{h.ticker_symbol}</div>
-                      <div className="text-xs text-slate-500 truncate">{h.name}</div>
+                      <div className="text-sm text-fg-primary font-medium truncate">{h.ticker_symbol}</div>
+                      <div className="text-xs text-fg-muted truncate">{h.name}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-num text-sm text-white">{fmtUsd(h.market_value)}</div>
+                      <div className="font-num text-sm text-fg-primary">{fmtUsd(h.market_value)}</div>
                       <div className={`font-num text-xs ${h.unrealized_pl >= 0 ? "pos" : "neg"}`}>
                         {fmtPct(h.unrealized_pl_pct, { showSign: true })}
                       </div>
                     </div>
                     <div className="w-16 text-right">
-                      <div className="text-xs text-slate-500">{h.weight_pct.toFixed(1)}%</div>
+                      <div className="text-xs text-fg-muted">{h.weight_pct.toFixed(1)}%</div>
                     </div>
                   </div>
                 ))}
@@ -156,36 +158,27 @@ export function OverviewPage() {
 
             <div className="card p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-white">Dividends — 12 mo</h3>
+                <h3 className="text-sm font-semibold text-fg-primary">Dividends — 12 mo</h3>
                 <Link to="/dividends" className="text-xs text-accent-green hover:underline">
                   Details →
                 </Link>
               </div>
-              <div className="font-num text-2xl text-white">
+              <div className="font-num text-2xl text-fg-primary">
                 {divs.data ? fmtUsd(divs.data.ytd_total) : "—"}
               </div>
-              <div className="text-xs text-slate-500 mb-4">year to date</div>
+              <div className="text-xs text-fg-muted mb-4">year to date</div>
               <div className="h-40">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={divs.data?.by_month ?? []}>
                     <XAxis
                       dataKey="month"
-                      tick={{ fontSize: 9, fill: "#64748b" }}
+                      tick={{ fontSize: 9, fill: ct.tick }}
                       tickFormatter={(v) => v.slice(5)}
-                      stroke="#1e293b"
+                      stroke={ct.grid}
                     />
                     <YAxis hide />
                     <Tooltip
-                      contentStyle={{
-                        background: "#111827",
-                        border: "1px solid #1e293b",
-                        borderRadius: 8,
-                        fontSize: 12,
-                        color: "#e2e8f0",
-                      }}
-                      itemStyle={{ color: "#e2e8f0" }}
-                      labelStyle={{ color: "#94a3b8" }}
-                      cursor={{ fill: "#1f2937" }}
+                      {...tooltipProps(ct)}
                       formatter={(v: number) => fmtUsd(v)}
                     />
                     <Bar dataKey="amount" fill="#10b981" radius={[2, 2, 0, 0]} />
@@ -199,7 +192,7 @@ export function OverviewPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="card p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-white">Recent activity</h3>
+                <h3 className="text-sm font-semibold text-fg-primary">Recent activity</h3>
                 <Link to="/transactions" className="text-xs text-accent-green hover:underline">
                   See all →
                 </Link>
@@ -217,11 +210,11 @@ export function OverviewPage() {
                 <tbody>
                   {tx.data?.transactions.slice(0, 7).map((t) => (
                     <tr key={t.id}>
-                      <td className="text-xs text-slate-400 font-num">{t.date}</td>
+                      <td className="text-xs text-fg-secondary font-num">{t.date}</td>
                       <td>
                         <TxBadge type={t.type} />
                       </td>
-                      <td className="font-num text-white text-sm">{t.ticker_symbol}</td>
+                      <td className="font-num text-fg-primary text-sm">{t.ticker_symbol}</td>
                       <td>
                         <InstPill name={t.institution} color={t.institution_color} />
                       </td>
@@ -231,7 +224,7 @@ export function OverviewPage() {
                         ) : t.type === "sell" ? (
                           <span className="pos">+{fmtUsd(t.amount)}</span>
                         ) : (
-                          <span className="text-slate-300">{fmtUsd(t.amount)}</span>
+                          <span className="text-fg-secondary">{fmtUsd(t.amount)}</span>
                         )}
                       </td>
                     </tr>
@@ -240,7 +233,7 @@ export function OverviewPage() {
               </table>
             </div>
             <div className="card p-5">
-              <h3 className="text-sm font-semibold text-white mb-4">Portfolio</h3>
+              <h3 className="text-sm font-semibold text-fg-primary mb-4">Portfolio</h3>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={syntheticSparkline(s?.total_value ?? 0)}>
@@ -251,15 +244,7 @@ export function OverviewPage() {
                       </linearGradient>
                     </defs>
                     <Tooltip
-                      contentStyle={{
-                        background: "#111827",
-                        border: "1px solid #1e293b",
-                        borderRadius: 8,
-                        fontSize: 12,
-                        color: "#e2e8f0",
-                      }}
-                      itemStyle={{ color: "#e2e8f0" }}
-                      labelStyle={{ color: "#94a3b8" }}
+                      {...tooltipProps(ct)}
                       formatter={(v: number) => fmtUsd(v)}
                       labelFormatter={() => ""}
                     />
@@ -273,7 +258,7 @@ export function OverviewPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-              <div className="text-xs text-slate-500 mt-2 text-center">
+              <div className="text-xs text-fg-muted mt-2 text-center">
                 Illustrative 30-day trajectory
               </div>
             </div>
@@ -297,11 +282,11 @@ function Kpi({
 }) {
   return (
     <div>
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</div>
-      <div className={`font-num text-lg ${color === "pos" ? "pos" : color === "neg" ? "neg" : "text-white"}`}>
+      <div className="text-[10px] text-fg-muted uppercase tracking-wider">{label}</div>
+      <div className={`font-num text-lg ${color === "pos" ? "pos" : color === "neg" ? "neg" : "text-fg-primary"}`}>
         {value}
       </div>
-      {sub && <div className={`font-num text-xs ${color === "pos" ? "pos" : color === "neg" ? "neg" : "text-slate-400"}`}>{sub}</div>}
+      {sub && <div className={`font-num text-xs ${color === "pos" ? "pos" : color === "neg" ? "neg" : "text-fg-secondary"}`}>{sub}</div>}
     </div>
   );
 }
@@ -320,7 +305,7 @@ function TxBadge({ type }: { type: string }) {
 
 function InstPill({ name, color }: { name: string; color: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-slate-300">
+    <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
       {name}
     </span>

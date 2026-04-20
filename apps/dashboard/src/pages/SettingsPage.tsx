@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 export function SettingsPage() {
   const { developer } = useAuth();
@@ -8,7 +9,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-xl font-semibold text-white">Settings</h1>
+      <h1 className="text-xl font-semibold text-fg-primary">Settings</h1>
       <ProfileSection />
       <SecuritySection />
       <AppearanceSection />
@@ -52,7 +53,7 @@ function ProfileSection() {
       </Field>
       <Field label="Email">
         <input className="input" value={developer?.email ?? ""} disabled />
-        <div className="text-[11px] text-slate-500 mt-1">
+        <div className="text-[11px] text-fg-muted mt-1">
           Email can't be changed (yet).
         </div>
       </Field>
@@ -149,16 +150,33 @@ function SecuritySection() {
 /* ---------- Appearance ---------- */
 
 function AppearanceSection() {
+  const { theme, setTheme } = useTheme();
+  const options: Array<{ value: "light" | "dark" | "system"; label: string; hint: string }> = [
+    { value: "light", label: "Light", hint: "Bright, high-contrast" },
+    { value: "dark", label: "Dark", hint: "Easy on the eyes" },
+    { value: "system", label: "System", hint: "Match your device" },
+  ];
   return (
     <Section title="Appearance">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm text-white">Theme</div>
-          <div className="text-xs text-slate-500">
-            Dark mode is the only theme for now. Light mode coming later.
-          </div>
-        </div>
-        <span className="badge-gray">Dark</span>
+      <div className="text-sm text-fg-primary">Theme</div>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((o) => {
+          const active = theme === o.value;
+          return (
+            <button
+              key={o.value}
+              onClick={() => setTheme(o.value)}
+              className={`rounded-lg px-3 py-3 text-left transition-all ${
+                active
+                  ? "bg-bg-overlay ring-2 ring-accent-brand/50"
+                  : "bg-bg-inset hover:bg-bg-hover"
+              }`}
+            >
+              <div className="text-sm font-medium text-fg-primary">{o.label}</div>
+              <div className="text-[10px] text-fg-muted mt-0.5">{o.hint}</div>
+            </button>
+          );
+        })}
       </div>
     </Section>
   );
@@ -191,7 +209,7 @@ function DangerSection() {
 
   return (
     <Section title="Danger zone" tone="danger">
-      <p className="text-sm text-slate-300">
+      <p className="text-sm text-fg-secondary">
         Deleting your account removes all your connected brokerages, holdings, transactions, and
         history. This cannot be undone.
       </p>
@@ -222,12 +240,12 @@ function AppInfoSection() {
   return (
     <Section title="About">
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="text-slate-500">Version</div>
-        <div className="font-num text-slate-300">0.1.0</div>
-        <div className="text-slate-500">Environment</div>
-        <div className="font-num text-slate-300">{env}</div>
-        <div className="text-slate-500">API</div>
-        <div className="font-num text-slate-300 truncate">{apiUrl}</div>
+        <div className="text-fg-muted">Version</div>
+        <div className="font-num text-fg-secondary">0.1.0</div>
+        <div className="text-fg-muted">Environment</div>
+        <div className="font-num text-fg-secondary">{env}</div>
+        <div className="text-fg-muted">API</div>
+        <div className="font-num text-fg-secondary truncate">{apiUrl}</div>
       </div>
     </Section>
   );
@@ -252,7 +270,7 @@ function Section({
     >
       <div
         className={`text-xs font-semibold uppercase tracking-wider ${
-          tone === "danger" ? "text-rose-400" : "text-slate-400"
+          tone === "danger" ? "text-rose-400" : "text-fg-secondary"
         }`}
       >
         {title}
@@ -275,12 +293,12 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-400 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-fg-secondary mb-1">{label}</label>
       {children}
       {error ? (
         <div className="text-xs text-rose-400 mt-1">{error}</div>
       ) : hint ? (
-        <div className="text-xs text-slate-500 mt-1">{hint}</div>
+        <div className="text-xs text-fg-muted mt-1">{hint}</div>
       ) : null}
     </div>
   );

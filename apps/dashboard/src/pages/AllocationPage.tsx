@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
+import { useChartTheme, tooltipProps } from "../lib/chartTheme";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 interface AllocResp {
@@ -20,7 +21,7 @@ export function AllocationPage() {
   });
 
   if (q.isLoading) {
-    return <div className="text-sm text-slate-500">Loading…</div>;
+    return <div className="text-sm text-fg-muted">Loading…</div>;
   }
 
   const empty =
@@ -34,12 +35,12 @@ export function AllocationPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-xl font-semibold text-white">Allocation</h1>
+          <h1 className="text-xl font-semibold text-fg-primary">Allocation</h1>
         </div>
         <div className="card p-10 text-center">
           <div className="text-5xl mb-4">◐</div>
-          <h2 className="text-lg font-semibold text-white mb-2">No allocation data yet</h2>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
+          <h2 className="text-lg font-semibold text-fg-primary mb-2">No allocation data yet</h2>
+          <p className="text-sm text-fg-secondary max-w-md mx-auto">
             Connect a brokerage to see how your portfolio is split across securities, brokerages, and asset classes.
           </p>
         </div>
@@ -50,8 +51,8 @@ export function AllocationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-white">Allocation</h1>
-        <p className="text-xs text-slate-500 mt-1">
+        <h1 className="text-xl font-semibold text-fg-primary">Allocation</h1>
+        <p className="text-xs text-fg-muted mt-1">
           Portfolio value {fmtUsd(q.data.total_value)}
         </p>
       </div>
@@ -82,9 +83,10 @@ function DonutCard({
   data: Array<{ label: string; value: number; weight_pct: number; color: string }>;
   labelFormat?: (s: string) => string;
 }) {
+  const ct = useChartTheme();
   return (
     <div className="card p-5">
-      <h3 className="text-sm font-semibold text-white mb-4">{title}</h3>
+      <h3 className="text-sm font-semibold text-fg-primary mb-4">{title}</h3>
       <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -95,7 +97,7 @@ function DonutCard({
               innerRadius="55%"
               outerRadius="85%"
               paddingAngle={2}
-              stroke="#0a0e1a"
+              stroke={ct.pieStroke}
               strokeWidth={2}
               animationBegin={0}
               animationDuration={400}
@@ -106,15 +108,7 @@ function DonutCard({
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{
-                background: "#111827",
-                border: "1px solid #1e293b",
-                borderRadius: 8,
-                fontSize: 12,
-                color: "#e2e8f0",
-              }}
-              itemStyle={{ color: "#e2e8f0" }}
-              labelStyle={{ color: "#94a3b8" }}
+              {...tooltipProps(ct)}
               formatter={(v: number, name: string) => [fmtUsd(v), labelFormat ? labelFormat(name) : name]}
             />
           </PieChart>
@@ -124,13 +118,13 @@ function DonutCard({
         {data.map((d) => (
           <div key={d.label} className="flex items-center gap-2 text-xs">
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
-            <span className="flex-1 truncate text-slate-300">
+            <span className="flex-1 truncate text-fg-secondary">
               {labelFormat ? labelFormat(d.label) : d.label}
             </span>
-            <span className="font-num text-slate-400 w-14 text-right">
+            <span className="font-num text-fg-secondary w-14 text-right">
               {d.weight_pct.toFixed(1)}%
             </span>
-            <span className="font-num text-slate-500 w-20 text-right">
+            <span className="font-num text-fg-muted w-20 text-right">
               {fmtUsd(d.value, { decimals: 0 })}
             </span>
           </div>
