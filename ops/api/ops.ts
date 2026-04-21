@@ -1,0 +1,316 @@
+// Vercel serverless function — fans out to every infra provider in parallel,
+// normalizes the responses, returns a single JSON payload the ops page renders.
+
+export const config = { runtime: "edge" };
+
+type Status = "ok" | "warn" | "error" | "unconfigured";
+
+interface ServiceResult {
+  status: Status;
+  message?: string;
+  data?: Record<string, unknown>;
+  error?: string;
+}
+
+function unconfigured(msg: string): ServiceResult {
+  return { status: "unconfigured", message: msg };
+}
+
+function safe<T>(label: string, fn: () => Promise<T>): Promise<T | ServiceResult> {
+  return fn().catch((err) => ({
+    status: "error" as Status,
+    error: `${label}: ${(err as Error).message}`,
+  }));
+}
+
+async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
+  const res = await fetch(url, init);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function fmtTime(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const sec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.round(sec / 3600)}h ago`;
+  return `${Math.round(sec / 86400)}d ago`;
+}
+
+/* -------------------------------------------------------- providers */
+
+async function getRender(): Promise<ServiceResult> {
+  const key = process.env.RENDER_API_KEY;
+  const serviceId = process.env.RENDER_SERVICE_ID;
+  if (!key || !serviceId) {
+    return unconfigured("Set RENDER_API_KEY and RENDER_SERVICE_ID in Vercel env.");
+  }
+  const headers = { Authorization: `Bearer ${key}` };
+  const [svc, deploys] = await Promise.all([
+    fetchJson(`https://api.render.com/v1/services/${serviceId}`, { headers }),
+    fetchJson(
+      `https://api.render.com/v1/services/${serviceId}/deploys?limit=5`,
+      { headers },
+    ),
+  ]);
+  const s = svc as Record<string, unknown>;
+  const deploysArr = deploys as Array<{ deploy: Record<string, unknown> }>;
+  const latestDeploy = deploysArr[0]?.deploy;
+  const status =
+    (latestDeploy?.status as string) === "live"
+      ? "ok"
+      : (latestDeploy?.status as string) === "build_failed" ||
+          (latestDeploy?.status as string) === "update_failed"
+        ? "error"
+        : "warn";
+
+  return {
+    status: status as Status,
+    data: {
+      _hero: String(s.name ?? "vesly-backend"),
+      _heroSub: `${s.type ?? "web_service"} · ${s.region ?? "oregon"}`,
+      "service status": s.suspended === "not_suspended" ? "running" : "suspended",
+      "last deploy": fmtTime(latestDeploy?.createdAt as string),
+      "deploy status": String(latestDeploy?.status ?? "unknown"),
+      "commit": String(
+        (latestDeploy?.commit as Record<string, unknown>)?.id ?? "—",
+      ).slice(0, 7),
+      _events: deploysArr.slice(0, 5).map((d) => ({
+        title: `${d.deploy.status} · ${String((d.deploy.commit as Record<string, unknown>)?.message ?? "").slice(0, 40)}`,
+        time: fmtTime(d.deploy.createdAt as string),
+      })),
+    },
+  };
+}
+
+async function getVercel(): Promise<ServiceResult> {
+  const token = process.env.VERCEL_API_TOKEN;
+  const teamId = process.env.VERCEL_TEAM_ID; // optional
+  if (!token) {
+    return unconfigured("Set VERCEL_API_TOKEN in Vercel env.");
+  }
+  const q = teamId ? `?teamId=${teamId}&limit=10` : "?limit=10";
+  const headers = { Authorization: `Bearer ${token}` };
+  const deployments = (await fetchJson(
+    `https://api.vercel.com/v6/deployments${q}`,
+    { headers },
+  )) as { deployments: Array<Record<string, unknown>> };
+
+  const deploys = deployments.deployments;
+  const latest = deploys[0];
+  const state = (latest?.state ?? latest?.readyState) as string;
+  const status: Status = state === "READY" ? "ok" : state === "ERROR" ? "error" : "warn";
+
+  // Group by project name so dashboard + link-ui show separately
+  const byProject = new Map<string, Record<string, unknown>>();
+  for (const d of deploys) {
+    const name = String(d.name ?? "unknown");
+    if (!byProject.has(name)) byProject.set(name, d);
+  }
+
+  return {
+    status,
+    data: {
+      _hero: String(deploys.length),
+      _heroSub: `recent deploys (last 10)`,
+      ...Object.fromEntries(
+        [...byProject.entries()].map(([name, d]) => [
+          name,
+          `${d.state ?? d.readyState} · ${fmtTime(
+            typeof d.createdAt === "number"
+              ? new Date(d.createdAt).toISOString()
+              : (d.createdAt as string),
+          )}`,
+        ]),
+      ),
+      _events: deploys.slice(0, 5).map((d) => ({
+        title: `${d.name}: ${d.state ?? d.readyState}`,
+        time: fmtTime(
+          typeof d.createdAt === "number"
+            ? new Date(d.createdAt).toISOString()
+            : (d.createdAt as string),
+        ),
+      })),
+    },
+  };
+}
+
+async function getNeon(): Promise<ServiceResult> {
+  const key = process.env.NEON_API_KEY;
+  const projectId = process.env.NEON_PROJECT_ID;
+  if (!key || !projectId) {
+    return unconfigured("Set NEON_API_KEY and NEON_PROJECT_ID in Vercel env.");
+  }
+  const headers = { Authorization: `Bearer ${key}`, Accept: "application/json" };
+  const proj = (await fetchJson(
+    `https://console.neon.tech/api/v2/projects/${projectId}`,
+    { headers },
+  )) as { project: Record<string, unknown> };
+  const branches = (await fetchJson(
+    `https://console.neon.tech/api/v2/projects/${projectId}/branches`,
+    { headers },
+  )) as { branches: Array<Record<string, unknown>> };
+
+  const p = proj.project;
+  const sizeBytes = Number(p.data_storage_bytes_hour ?? 0);
+  const computeCu = Number(p.cpu_used_sec ?? 0) / 3600; // seconds → CU-hours
+
+  return {
+    status: "ok",
+    data: {
+      _hero: (p.name as string) ?? "neon",
+      _heroSub: `region ${p.region_id ?? "?"} · pg ${p.pg_version ?? "?"}`,
+      branches: branches.branches.length,
+      "storage used": bytes(sizeBytes),
+      "compute (this hour)": `${computeCu.toFixed(3)} CU-h`,
+      "created": fmtTime(p.created_at as string),
+    },
+  };
+}
+
+async function getUpstash(): Promise<ServiceResult> {
+  const email = process.env.UPSTASH_EMAIL;
+  const apiKey = process.env.UPSTASH_API_KEY;
+  const dbId = process.env.UPSTASH_DATABASE_ID;
+  if (!email || !apiKey || !dbId) {
+    return unconfigured(
+      "Set UPSTASH_EMAIL, UPSTASH_API_KEY, UPSTASH_DATABASE_ID in Vercel env.",
+    );
+  }
+  const auth = btoa(`${email}:${apiKey}`);
+  const headers = { Authorization: `Basic ${auth}` };
+  const db = (await fetchJson(
+    `https://api.upstash.com/v2/redis/database/${dbId}`,
+    { headers },
+  )) as Record<string, unknown>;
+
+  return {
+    status: "ok",
+    data: {
+      _hero: String(db.database_name ?? "redis"),
+      _heroSub: `${db.region ?? "?"} · ${db.type ?? "?"}`,
+      "commands (today)": Number(db.daily_requests ?? 0).toLocaleString(),
+      "bandwidth (today)": bytes(Number(db.daily_bandwidth ?? 0)),
+      "storage used": bytes(Number(db.db_disk_threshold ?? 0)),
+      "keys": Number(db.db_size ?? 0).toLocaleString(),
+    },
+  };
+}
+
+async function getGitHub(): Promise<ServiceResult> {
+  const repo = process.env.GITHUB_REPO ?? "kazoosa/Beacon";
+  const token = process.env.GITHUB_TOKEN;
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const [commits, prs, repoInfo] = await Promise.all([
+    fetchJson(`https://api.github.com/repos/${repo}/commits?per_page=5`, { headers }),
+    fetchJson(`https://api.github.com/repos/${repo}/pulls?state=open&per_page=10`, {
+      headers,
+    }),
+    fetchJson(`https://api.github.com/repos/${repo}`, { headers }),
+  ]);
+
+  const commitArr = commits as Array<{
+    sha: string;
+    commit: { message: string; author: { date: string } };
+  }>;
+  const prArr = prs as Array<{ title: string; number: number }>;
+  const r = repoInfo as Record<string, unknown>;
+
+  return {
+    status: "ok",
+    data: {
+      _hero: `${r.stargazers_count ?? 0}`,
+      _heroSub: `stars · ${repo}`,
+      "open PRs": prArr.length,
+      "last commit": fmtTime(commitArr[0]?.commit?.author?.date),
+      "default branch": String(r.default_branch ?? "main"),
+      _events: commitArr.slice(0, 5).map((c) => ({
+        title: c.commit.message.split("\n")[0]!.slice(0, 50),
+        time: fmtTime(c.commit.author.date),
+      })),
+    },
+  };
+}
+
+async function getHealth(): Promise<ServiceResult> {
+  const url = process.env.BACKEND_HEALTH_URL ?? "https://vesly-backend.onrender.com/health";
+  const t0 = Date.now();
+  const res = await fetch(url, { cache: "no-store" });
+  const latencyMs = Date.now() - t0;
+  if (!res.ok) {
+    return {
+      status: "error",
+      error: `${res.status} ${res.statusText}`,
+      data: { latency: `${latencyMs}ms`, url },
+    };
+  }
+  const body = (await res.json()) as { ok?: boolean; environment?: string };
+  return {
+    status: body.ok ? "ok" : "warn",
+    data: {
+      _hero: body.ok ? "UP" : "DOWN",
+      _heroSub: `env ${body.environment ?? "?"}`,
+      latency: `${latencyMs}ms`,
+      url,
+    },
+  };
+}
+
+/* --------------------------------------------------------- handler */
+
+export default async function handler(req: Request): Promise<Response> {
+  const expected = process.env.OPS_PASSWORD ?? "";
+  const provided = req.headers.get("x-ops-password") ?? "";
+  if (!expected) {
+    return new Response(
+      JSON.stringify({ error: "OPS_PASSWORD not set in Vercel env vars." }),
+      { status: 500, headers: { "content-type": "application/json" } },
+    );
+  }
+  if (provided !== expected) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const [render, vercel, neon, upstash, github, health] = await Promise.all([
+    safe("render", getRender),
+    safe("vercel", getVercel),
+    safe("neon", getNeon),
+    safe("upstash", getUpstash),
+    safe("github", getGitHub),
+    safe("health", getHealth),
+  ]);
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      services: { render, vercel, neon, upstash, github, health },
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+/* ---------------------------------------------------------- utils */
+
+function bytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
