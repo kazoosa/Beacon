@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
+import { CsvImport } from "../components/CsvImport";
 
 const DEMO_EMAIL = "demo@finlink.dev";
 
@@ -140,10 +141,12 @@ export function AccountsPage() {
         })}
         {groups.size === 0 && (
           <div className="md:col-span-2 card p-10 text-center text-fg-secondary text-sm">
-            No brokerages connected. Use "+ Connect brokerage" in the sidebar.
+            No brokerages connected. Use "+ Connect brokerage" in the sidebar — or import a CSV below.
           </div>
         )}
       </div>
+
+      <CsvImport />
     </div>
   );
 }

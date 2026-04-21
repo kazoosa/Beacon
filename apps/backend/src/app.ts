@@ -20,6 +20,7 @@ import sandboxRoutes from "./routes/sandbox.routes.js";
 import pricesRoutes from "./routes/prices.routes.js";
 import portfolioRoutes from "./routes/portfolio.routes.js";
 import snaptradeRoutes from "./routes/snaptrade.routes.js";
+import csvRoutes from "./routes/csv.routes.js";
 import { swaggerSpec } from "./swagger.js";
 
 export function createApp() {
@@ -69,6 +70,7 @@ export function createApp() {
   app.use("/api/prices", pricesRoutes);
   app.use("/api/portfolio", portfolioRoutes);
   app.use("/api/snaptrade", snaptradeRoutes);
+  app.use("/api/csv", csvRoutes);
 
   app.use(errorHandler);
   return app;

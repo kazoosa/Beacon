@@ -32,6 +32,7 @@
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "nanoid": "^5.0.7",
+    "csv-parse": "^5.5.6",
     "pino": "^9.3.2",
     "pino-http": "^10.2.0",
     "snaptrade-typescript-sdk": "^9.0.98",
