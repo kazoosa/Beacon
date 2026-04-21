@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { MoveRight, PhoneCall } from "lucide-react";
+import { MoveRight, Play } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "./button";
 
@@ -67,7 +67,7 @@ export function AnimatedHero() {
           </div>
           <div className="flex flex-row gap-3 flex-wrap justify-center">
             <Button size="lg" variant="outline" className="gap-2" asChild>
-              <Link to="/login">Try the demo <PhoneCall className="w-4 h-4" /></Link>
+              <Link to="/login"><Play className="w-4 h-4" /> Try the demo</Link>
             </Button>
             <Button size="lg" className="gap-2" asChild>
               <Link to="/register">Get started free <MoveRight className="w-4 h-4" /></Link>
