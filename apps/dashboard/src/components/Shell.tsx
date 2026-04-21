@@ -34,7 +34,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex bg-bg-base">
       <aside
-        className="w-60 bg-bg-raised border-r border-border-subtle flex flex-col"
+        className="w-60 bg-bg-raised border-r border-border-subtle flex flex-col sticky top-0 h-screen overflow-y-auto shrink-0"
         style={{ boxShadow: "1px 0 0 0 rgb(var(--border-subtle))" }}
       >
         <div className="h-14 flex items-center justify-between gap-2 px-4 border-b border-border-subtle">
