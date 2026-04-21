@@ -89,9 +89,9 @@ function Hero() {
           <span className="gradient-text">One dashboard.</span>
         </h1>
         <p className="landing-hero-sub">
-          Beacon pulls your holdings, transactions, and dividends from Fidelity, Schwab, Vanguard,
-          Robinhood, and 30+ brokerages into one clean portfolio view. Built for the investor who's
-          tired of juggling tabs.
+          Beacon pulls your holdings, transactions, and dividends from Robinhood, Interactive Brokers,
+          Webull, Vanguard, Public, Coinbase, and 20+ other brokerages into one clean portfolio view.
+          Don't see yours? Upload a CSV — we parse every major format.
         </p>
         <div className="landing-hero-cta">
           <Link to="/register" className="landing-btn landing-btn-primary landing-btn-lg">
