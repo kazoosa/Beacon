@@ -14,6 +14,7 @@ interface Props {
   hero?: string;
   metrics?: Metric[];
   events?: Array<{ title: string; time?: string }>;
+  errorMessage?: string;
   extLink?: string;
   extLabel?: string;
 }
@@ -32,6 +33,7 @@ export function StatusCard({
   hero,
   metrics,
   events,
+  errorMessage,
   extLink,
   extLabel,
 }: Props) {
@@ -51,6 +53,23 @@ export function StatusCard({
       </div>
 
       {hero && <div className="hero">{hero}</div>}
+
+      {errorMessage && (
+        <div
+          style={{
+            background: "rgba(251, 191, 36, 0.08)",
+            border: "1px solid rgba(251, 191, 36, 0.2)",
+            borderRadius: 6,
+            padding: "8px 10px",
+            color: "#fbbf24",
+            fontSize: 11,
+            marginBottom: 12,
+            lineHeight: 1.4,
+          }}
+        >
+          {errorMessage}
+        </div>
+      )}
 
       {metrics && metrics.length > 0 && (
         <div className="metrics">

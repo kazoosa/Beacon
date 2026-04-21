@@ -121,7 +121,12 @@ export function App() {
 
   // Roll up the overall status — worst of any service wins
   const allStatuses = services
-    ? Object.values(services).map((s) => s.status)
+    ? Object.entries(services).map(([name, s]) => {
+        // GitHub rate-limit errors are a warning, not a "real" outage —
+        // don't drag the whole board to red for that.
+        if (name === "github" && s.status === "error") return "warn" as const;
+        return s.status;
+      })
     : [];
   const overallStatus: Status = allStatuses.includes("error")
     ? "error"
@@ -175,8 +180,8 @@ export function App() {
                   hint: services.health?.data?.latency as string | undefined,
                 },
               ]}
-              extLink={(services.health?.data?.url as string) ?? undefined}
-              extLabel="Open health page"
+              extLink="https://stats.uptimerobot.com/yo9bjqio7P"
+              extLabel="Open UptimeRobot status"
             />
 
             <StatusCard
@@ -269,23 +274,34 @@ export function App() {
             <StatusCard
               title="Code changes"
               subtitle="What you've pushed to the app lately"
-              status={services.github?.status}
+              status={services.github?.status === "error" ? "warn" : services.github?.status}
               hero={
                 services.github?.data?._events
                   ? `${(services.github.data._events as Array<unknown>).length} recent`
-                  : "—"
+                  : services.github?.status === "error"
+                    ? "Rate limited"
+                    : "—"
               }
-              metrics={[
-                {
-                  label: "Last change",
-                  value: String(services.github?.data?.["last commit"] ?? "—"),
-                },
-                {
-                  label: "Open pull requests",
-                  value: String(services.github?.data?.["open PRs"] ?? "0"),
-                  hint: "Changes waiting to be merged",
-                },
-              ]}
+              errorMessage={
+                services.github?.status === "error"
+                  ? "GitHub blocked the request (anonymous rate limit). Add a GITHUB_TOKEN env var to fix — see ops/README.md."
+                  : undefined
+              }
+              metrics={
+                services.github?.data
+                  ? [
+                      {
+                        label: "Last change",
+                        value: String(services.github.data["last commit"] ?? "—"),
+                      },
+                      {
+                        label: "Open pull requests",
+                        value: String(services.github.data["open PRs"] ?? "0"),
+                        hint: "Changes waiting to be merged",
+                      },
+                    ]
+                  : undefined
+              }
               events={
                 (services.github?.data?._events as
                   | Array<{ title: string; time?: string }>
