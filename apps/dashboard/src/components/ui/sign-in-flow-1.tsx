@@ -214,6 +214,7 @@ const Shader: React.FC<{ source: string; uniforms: Uniforms }> = ({ source, unif
 
 export const SignInPage = ({ className }: SignInPageProps) => {
   const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [step, setStep] = useState<"email" | "code" | "success">("email");
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -306,15 +307,47 @@ export const SignInPage = ({ className }: SignInPageProps) => {
                   >
                     <div className="space-y-1">
                       <h1 className="text-[2.5rem] font-bold leading-[1.1] tracking-tight text-white">
-                        Welcome to Beacon
+                        {mode === "signin" ? "Welcome back" : "Create your account"}
                       </h1>
-                      <p className="text-[1.6rem] text-white/70 font-light">Sign in to your account</p>
+                      <p className="text-[1.35rem] text-white/70 font-light">
+                        {mode === "signin"
+                          ? "Sign in to your Beacon account"
+                          : "Start tracking your portfolio today"}
+                      </p>
+                    </div>
+
+                    {/* Sign-in / Sign-up toggle */}
+                    <div className="inline-flex rounded-full border border-white/10 p-1 bg-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setMode("signin")}
+                        className={cn(
+                          "px-6 py-2 rounded-full text-sm transition-colors",
+                          mode === "signin"
+                            ? "bg-white text-black font-medium"
+                            : "text-white/70 hover:text-white",
+                        )}
+                      >
+                        Sign in
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode("signup")}
+                        className={cn(
+                          "px-6 py-2 rounded-full text-sm transition-colors",
+                          mode === "signup"
+                            ? "bg-white text-black font-medium"
+                            : "text-white/70 hover:text-white",
+                        )}
+                      >
+                        Sign up
+                      </button>
                     </div>
 
                     <div className="space-y-4">
                       <button className="backdrop-blur-[2px] w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-full py-3 px-4 transition-colors">
                         <span className="text-lg">G</span>
-                        <span>Sign in with Google</span>
+                        <span>{mode === "signin" ? "Sign in with Google" : "Continue with Google"}</span>
                       </button>
                       <div className="flex items-center gap-4">
                         <div className="h-px bg-white/10 flex-1" />
@@ -341,11 +374,23 @@ export const SignInPage = ({ className }: SignInPageProps) => {
                       </form>
                     </div>
 
-                    <p className="text-xs text-white/40 pt-10">
-                      By signing up, you agree to Beacon's{" "}
-                      <Link to="#" className="underline text-white/40 hover:text-white/60 transition-colors">Terms</Link>,{" "}
-                      <Link to="#" className="underline text-white/40 hover:text-white/60 transition-colors">Privacy Notice</Link>, and{" "}
-                      <Link to="#" className="underline text-white/40 hover:text-white/60 transition-colors">Cookie Notice</Link>.
+                    <p className="text-xs text-white/40 pt-6">
+                      {mode === "signin"
+                        ? "Don't have an account? "
+                        : "Already have an account? "}
+                      <button
+                        type="button"
+                        onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                        className="underline text-white/60 hover:text-white transition-colors"
+                      >
+                        {mode === "signin" ? "Sign up" : "Sign in"}
+                      </button>
+                    </p>
+                    <p className="text-[10px] text-white/30 pt-4">
+                      By continuing, you agree to Beacon's{" "}
+                      <Link to="#" className="underline hover:text-white/50 transition-colors">Terms</Link>{" "}
+                      and{" "}
+                      <Link to="#" className="underline hover:text-white/50 transition-colors">Privacy Notice</Link>.
                     </p>
                   </motion.div>
                 ) : step === "code" ? (

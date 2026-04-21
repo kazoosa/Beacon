@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 import { Shell } from "./components/Shell";
 import { LandingPage } from "./pages/LandingPage";
-import { PreviewLandingPage } from "./pages/PreviewLandingPage";
 import { PreviewSignInPage } from "./pages/PreviewSignInPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -38,8 +37,7 @@ export function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* PREVIEW — marketplace components under evaluation, not live UX */}
-          <Route path="/preview-landing" element={<PreviewLandingPage />} />
+          {/* PREVIEW — marketplace sign-in under evaluation */}
           <Route path="/preview-signin" element={<PreviewSignInPage />} />
 
           {/* Authenticated app routes — all under /app */}
