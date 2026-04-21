@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { APP_NAME } from "../lib/brand";
 import { BeaconMark } from "../components/BeaconMark";
+
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -11,6 +13,13 @@ export function LoginPage() {
   const [password, setPassword] = useState("demo1234");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Wake the backend as soon as the login page mounts. Render's free tier
+  // sleeps after 15min idle and takes 30-50s to cold-start. This fire-and-
+  // forget GET /health gets the engine spinning while the user types.
+  useEffect(() => {
+    fetch(`${API_URL}/health`, { method: "GET", mode: "cors" }).catch(() => {});
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

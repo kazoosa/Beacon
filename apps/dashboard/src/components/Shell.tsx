@@ -33,7 +33,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex bg-bg-base">
-      <aside className="w-60 bg-bg-raised border-r border-border-subtle flex flex-col">
+      <aside
+        className="w-60 bg-bg-raised border-r border-border-subtle flex flex-col"
+        style={{ boxShadow: "1px 0 0 0 rgb(var(--border-subtle))" }}
+      >
         <div className="h-14 flex items-center justify-between gap-2 px-4 border-b border-border-subtle">
           <div className="flex items-center gap-2.5 text-fg-primary">
             <BeaconMark size={22} />
