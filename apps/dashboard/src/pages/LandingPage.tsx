@@ -112,7 +112,8 @@ function Hero() {
   );
 }
 
-/* Mock dashboard rendered as real HTML for the hero */
+/* Hero preview — real screenshot of the app in a browser-chrome frame.
+   Drop /public/screenshots/overview.png into the project and it shows up here. */
 function DashboardPreview() {
   return (
     <div className="landing-container">
@@ -123,65 +124,53 @@ function DashboardPreview() {
           <span className="hp-dot hp-green" />
           <span className="hp-url">app.beacon.finance/overview</span>
         </div>
-        <div className="hero-preview-body">
-          <div className="hp-hero">
-            <div>
-              <div className="hp-label">Portfolio value</div>
-              <div className="hp-bignum">$284,612.38</div>
-              <div className="hp-delta">+ $1,284.22 <span className="hp-pct">+0.45%</span> today</div>
-            </div>
-            <div className="hp-kpis">
-              <div><div className="hp-label">Unrealized P/L</div><div className="hp-num hp-pos">+$42,118</div></div>
-              <div><div className="hp-label">YTD dividends</div><div className="hp-num hp-pos">+$3,240</div></div>
-              <div><div className="hp-label">Holdings</div><div className="hp-num">47</div></div>
-              <div><div className="hp-label">Brokerages</div><div className="hp-num">4</div></div>
-            </div>
-          </div>
-
-          <div className="hp-grid">
-            <div className="hp-card">
-              <div className="hp-card-title">Top holdings</div>
-              {[
-                { t: "VTI", n: "Vanguard Total Stock Market", v: "$48,292", d: "+12.4%" },
-                { t: "VXUS", n: "Vanguard Total International", v: "$31,120", d: "+8.1%" },
-                { t: "AAPL", n: "Apple Inc.", v: "$22,418", d: "+24.6%" },
-                { t: "MSFT", n: "Microsoft Corporation", v: "$18,910", d: "+18.2%" },
-              ].map((h) => (
-                <div key={h.t} className="hp-row">
-                  <span className="hp-ticker">{h.t}</span>
-                  <span className="hp-name">{h.n}</span>
-                  <span className="hp-val">{h.v}</span>
-                  <span className="hp-delta2 hp-pos">{h.d}</span>
-                </div>
-              ))}
-            </div>
-            <div className="hp-card">
-              <div className="hp-card-title">Allocation</div>
-              <div className="hp-donut">
-                <svg viewBox="0 0 36 36" width="100%">
-                  <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeOpacity="0.08" strokeWidth="4" />
-                  <circle cx="18" cy="18" r="14" fill="none" stroke="#7c6aff" strokeWidth="4"
-                    strokeDasharray="42 88" strokeDashoffset="0" transform="rotate(-90 18 18)" />
-                  <circle cx="18" cy="18" r="14" fill="none" stroke="#34d399" strokeWidth="4"
-                    strokeDasharray="28 88" strokeDashoffset="-42" transform="rotate(-90 18 18)" />
-                  <circle cx="18" cy="18" r="14" fill="none" stroke="#60a5fa" strokeWidth="4"
-                    strokeDasharray="18 88" strokeDashoffset="-70" transform="rotate(-90 18 18)" />
-                </svg>
-                <div className="hp-donut-center">
-                  <div className="hp-label">Stocks</div>
-                  <div className="hp-num hp-bold">48%</div>
-                </div>
-              </div>
-              <div className="hp-legend">
-                <div><span className="hp-sw" style={{ background: "#7c6aff" }} />Stocks · 48%</div>
-                <div><span className="hp-sw" style={{ background: "#34d399" }} />ETFs · 32%</div>
-                <div><span className="hp-sw" style={{ background: "#60a5fa" }} />Bonds · 20%</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Screenshot
+          src="/screenshots/overview.png"
+          alt="Beacon dashboard — consolidated portfolio view"
+          caption="Overview · /app"
+        />
       </div>
     </div>
+  );
+}
+
+/**
+ * Drop-in image component. If the PNG hasn't been added yet, renders a
+ * subtle placeholder with instructions instead of a broken-image icon.
+ */
+function Screenshot({
+  src,
+  alt,
+  caption,
+}: {
+  src: string;
+  alt: string;
+  caption?: string;
+}) {
+  const [errored, setErrored] = useState(false);
+  if (errored) {
+    return (
+      <div className="screenshot-placeholder">
+        <div className="screenshot-placeholder-inner">
+          <div className="screenshot-placeholder-icon">📸</div>
+          <div className="screenshot-placeholder-title">Screenshot pending</div>
+          <div className="screenshot-placeholder-sub">
+            Drop <code>{src.replace("/screenshots/", "")}</code> into{" "}
+            <code>apps/dashboard/public/screenshots/</code>
+          </div>
+          {caption && <div className="screenshot-placeholder-caption">{caption}</div>}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="screenshot-img"
+      onError={() => setErrored(true)}
+      loading="lazy"
+    />
   );
 }
 
@@ -302,21 +291,21 @@ function ProductShowcase() {
       title: "See every position, instantly.",
       body:
         "Consolidated holdings across every brokerage, deduped by ticker, sorted by whatever you care about: value, P/L %, weight, ticker. Expand any row to see which accounts actually hold it.",
-      image: <ShowcaseHoldings />,
+      image: <Screenshot src="/screenshots/holdings.png" alt="Holdings page" caption="Holdings · /app/holdings" />,
     },
     {
       eyebrow: "Dividends",
       title: "Income that actually adds up.",
       body:
         "YTD and lifetime totals, a 12-month bar chart, top payers by dollar — and a forward forecast of what's coming in the next 12 months so you can plan, not guess.",
-      image: <ShowcaseDividends />,
+      image: <Screenshot src="/screenshots/dividends.png" alt="Dividends page" caption="Dividends · /app/dividends" />,
     },
     {
       eyebrow: "Allocation",
       title: "Know what you own, not just what you have.",
       body:
         "Three donut charts in one glance: by security, by brokerage, by asset class. When tech is 40% of your portfolio, Beacon tells you — before the market does.",
-      image: <ShowcaseAllocation />,
+      image: <Screenshot src="/screenshots/allocation.png" alt="Allocation page" caption="Allocation · /app/allocation" />,
     },
   ];
 
@@ -445,9 +434,10 @@ function Pricing() {
         "Custom benchmarks",
         "Priority support",
       ],
-      cta: "Start Elite",
+      cta: "Notify me",
       ctaLink: "/register",
       accent: false,
+      comingSoon: true,
     },
   ];
 
@@ -461,29 +451,52 @@ function Pricing() {
         />
         <div className="pricing-grid">
           {tiers.map((t) => (
-            <div key={t.name} className={`pricing-card ${t.accent ? "accent" : ""}`}>
+            <div
+              key={t.name}
+              className={`pricing-card ${t.accent ? "accent" : ""} ${t.comingSoon ? "coming-soon" : ""}`}
+            >
               {t.badge && <div className="pricing-badge">{t.badge}</div>}
-              <div className="pricing-name">{t.name}</div>
-              <div className="pricing-price">
-                <span className="pricing-dollar">{t.price}</span>
-                <span className="pricing-cadence">{t.cadence}</span>
+              {t.comingSoon && (
+                <div className="pricing-coming-soon-overlay">
+                  <div className="pricing-coming-soon-badge">
+                    <IconX />
+                    <span>Coming soon</span>
+                  </div>
+                </div>
+              )}
+              <div className="pricing-card-inner">
+                <div className="pricing-name">{t.name}</div>
+                <div className="pricing-price">
+                  <span className="pricing-dollar">{t.price}</span>
+                  <span className="pricing-cadence">{t.cadence}</span>
+                </div>
+                {t.annual && <div className="pricing-annual">{t.annual}</div>}
+                <div className="pricing-blurb">{t.blurb}</div>
+                {t.comingSoon ? (
+                  <button
+                    className="landing-btn landing-btn-secondary pricing-cta"
+                    disabled
+                    aria-disabled="true"
+                  >
+                    {t.cta}
+                  </button>
+                ) : (
+                  <Link
+                    to={t.ctaLink}
+                    className={`landing-btn ${t.accent ? "landing-btn-primary" : "landing-btn-secondary"} pricing-cta`}
+                  >
+                    {t.cta}
+                  </Link>
+                )}
+                <div className="pricing-divider" />
+                <ul className="pricing-features">
+                  {t.features.map((f, i) => (
+                    <li key={i}>
+                      <IconCheck /> {f}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              {t.annual && <div className="pricing-annual">{t.annual}</div>}
-              <div className="pricing-blurb">{t.blurb}</div>
-              <Link
-                to={t.ctaLink}
-                className={`landing-btn ${t.accent ? "landing-btn-primary" : "landing-btn-secondary"} pricing-cta`}
-              >
-                {t.cta}
-              </Link>
-              <div className="pricing-divider" />
-              <ul className="pricing-features">
-                {t.features.map((f, i) => (
-                  <li key={i}>
-                    <IconCheck /> {f}
-                  </li>
-                ))}
-              </ul>
             </div>
           ))}
         </div>
@@ -790,81 +803,15 @@ function IconCheck() {
     </svg>
   );
 }
-
-/* -------------------------------------------- Showcase mini-previews */
-
-function ShowcaseHoldings() {
+function IconX() {
   return (
-    <div className="sc-preview">
-      <div className="sc-preview-head">
-        <span className="sc-preview-title">Holdings · 47 positions</span>
-      </div>
-      {[
-        { t: "VTI", n: "Vanguard Total Stock Market", v: "$48,292", p: "+12.4%" },
-        { t: "VXUS", n: "Vanguard Total International", v: "$31,120", p: "+8.1%" },
-        { t: "AAPL", n: "Apple Inc.", v: "$22,418", p: "+24.6%" },
-        { t: "MSFT", n: "Microsoft Corporation", v: "$18,910", p: "+18.2%" },
-        { t: "NVDA", n: "NVIDIA Corporation", v: "$15,402", p: "+142.8%" },
-      ].map((h) => (
-        <div key={h.t} className="sc-row">
-          <span className="sc-tick">{h.t}</span>
-          <span className="sc-name">{h.n}</span>
-          <span className="sc-val">{h.v}</span>
-          <span className="sc-pos">{h.p}</span>
-        </div>
-      ))}
-    </div>
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
   );
 }
 
-function ShowcaseDividends() {
-  const heights = [18, 24, 32, 26, 38, 42, 34, 46, 52, 44, 50, 58];
-  return (
-    <div className="sc-preview">
-      <div className="sc-preview-head">
-        <div>
-          <div className="sc-preview-title">YTD income</div>
-          <div className="sc-bignum hp-pos">+$3,240</div>
-        </div>
-        <span className="sc-pill">+18% vs last year</span>
-      </div>
-      <div className="sc-bars">
-        {heights.map((h, i) => (
-          <div key={i} className="sc-bar" style={{ height: `${h}px` }} />
-        ))}
-      </div>
-      <div className="sc-bars-labels">
-        <span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span>
-        <span>J</span><span>A</span><span>S</span><span>O</span><span>N</span><span>D</span>
-      </div>
-    </div>
-  );
-}
-
-function ShowcaseAllocation() {
-  return (
-    <div className="sc-preview">
-      <div className="sc-preview-head">
-        <span className="sc-preview-title">Allocation</span>
-      </div>
-      <div className="sc-alloc">
-        {[
-          { l: "Technology", p: 38, c: "#7c6aff" },
-          { l: "Financial Services", p: 18, c: "#34d399" },
-          { l: "Healthcare", p: 14, c: "#60a5fa" },
-          { l: "Consumer", p: 12, c: "#fbbf24" },
-          { l: "Energy", p: 8, c: "#f87171" },
-          { l: "Other", p: 10, c: "#a78bfa" },
-        ].map((s) => (
-          <div key={s.l} className="sc-alloc-row">
-            <span className="sc-alloc-label">{s.l}</span>
-            <div className="sc-alloc-bar">
-              <div className="sc-alloc-fill" style={{ width: `${s.p}%`, background: s.c }} />
-            </div>
-            <span className="sc-alloc-pct">{s.p}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// Showcase mini-previews replaced by real screenshots loaded from
+// /public/screenshots/. See apps/dashboard/public/screenshots/README.md
+// for which files to drop in.
