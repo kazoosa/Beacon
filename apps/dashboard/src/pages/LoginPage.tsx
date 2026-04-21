@@ -9,8 +9,8 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://
 export function LoginPage() {
   const { login } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("demo@finlink.dev");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,13 +50,24 @@ export function LoginPage() {
         <h1 className="text-xl font-semibold text-fg-primary mb-1">Sign in</h1>
         <p className="text-sm text-fg-secondary mb-6">Track all your investments in one place</p>
         <label className="block text-xs font-medium text-fg-secondary mb-1">Email</label>
-        <input className="input mb-3" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input
+          className="input mb-3"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
         <label className="block text-xs font-medium text-fg-secondary mb-1">Password</label>
         <input
           type="password"
+          autoComplete="current-password"
           className="input mb-4"
+          placeholder="••••••••"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
         />
         {err && <div className="text-sm text-rose-400 mb-3">{err}</div>}
         <button type="submit" className="btn-primary w-full justify-center" disabled={busy}>
