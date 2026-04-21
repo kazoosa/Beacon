@@ -188,29 +188,41 @@ function DashboardPreview() {
 /* ----------------------------------------------------- Supported brokers */
 
 function SupportedBrokers() {
+  // Real list of brokerages Beacon can auto-sync via SnapTrade. CSV covers
+  // anything not in this list (Fidelity, Schwab, and any CSV-exporting broker).
   const brokers = [
-    "Fidelity",
-    "Charles Schwab",
-    "Vanguard",
     "Robinhood",
-    "Webull",
     "Interactive Brokers",
+    "Webull",
+    "Vanguard",
     "E*TRADE",
-    "TD Ameritrade",
-    "Merrill",
-    "Alpaca",
-    "M1 Finance",
     "Wealthsimple",
+    "Public",
+    "Coinbase",
+    "Kraken",
+    "tastytrade",
+    "Binance",
+    "eToro",
+    "Moomoo",
+    "Questrade",
+    "TD Direct Investing",
+    "DEGIRO",
+    "Trading212",
+    "AJ Bell",
   ];
   return (
     <section className="landing-brokers">
       <div className="landing-container">
-        <div className="landing-brokers-label">Works with your brokerage</div>
+        <div className="landing-brokers-label">Auto-syncs with</div>
         <div className="landing-brokers-grid">
           {brokers.map((b) => (
             <span key={b} className="landing-broker-chip">{b}</span>
           ))}
-          <span className="landing-broker-chip muted">and 20+ more</span>
+          <span className="landing-broker-chip muted">+ 8 more</span>
+        </div>
+        <div className="landing-brokers-note">
+          Not on this list? Upload a CSV from Fidelity, Schwab, or any broker — we parse every
+          major format.
         </div>
       </div>
     </section>
@@ -428,7 +440,6 @@ function Pricing() {
         "Monthly AI portfolio letter",
         "Natural-language queries",
         "AI tax-loss harvesting plan",
-        "Plaid auto-sync (Fidelity, Schwab, Vanguard)",
         "Wash-sale detection",
         "Tax-lot accounting (FIFO/LIFO)",
         "Custom benchmarks",
@@ -542,7 +553,7 @@ function FAQ() {
   const items = [
     {
       q: "Which brokerages does Beacon support?",
-      a: "Via auto-sync: Fidelity, Schwab, Vanguard, Robinhood, Webull, Alpaca, Interactive Brokers, E*TRADE, Wealthsimple, M1 Finance, SoFi, Public, and 20+ more. For anything else, you can upload a CSV — we support the standard export format from every major broker.",
+      a: "Via auto-sync: Robinhood, Interactive Brokers, Webull, Vanguard US, E*TRADE, Wealthsimple, Public, tastytrade, Questrade, Moomoo, eToro, TD Direct Investing, DEGIRO, Trading212, AJ Bell, Zerodha, Upstox, CommSec, Stake, Bux — plus Coinbase, Kraken, and Binance for crypto. For any broker not on that list (including Fidelity and Schwab), upload a CSV export and Beacon parses it automatically.",
     },
     {
       q: "Can Beacon see my login credentials?",

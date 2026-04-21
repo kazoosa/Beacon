@@ -496,6 +496,14 @@ html.dark .hp-pos { color: #34d399; }
 }
 .landing-broker-chip.muted { color: rgb(var(--fg-muted)); background: transparent; }
 
+.landing-brokers-note {
+  text-align: center;
+  font-size: 12.5px;
+  color: rgb(var(--fg-muted));
+  margin-top: 18px;
+  line-height: 1.5;
+}
+
 /* ─────────────────────── Section header ─────────────────────── */
 
 .landing-section {
