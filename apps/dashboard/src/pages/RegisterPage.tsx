@@ -21,7 +21,7 @@ export function RegisterPage() {
     setBusy(true);
     try {
       await register(name, email, password);
-      nav("/");
+      nav("/app");
     } catch (e) {
       const err = e as Error & { fields?: Record<string, string> };
       setFields(err.fields ?? {});

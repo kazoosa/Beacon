@@ -27,7 +27,7 @@ export function LoginPage() {
     setBusy(true);
     try {
       await login(email, password);
-      nav("/");
+      nav("/app");
     } catch (e) {
       setErr((e as Error).message);
     } finally {

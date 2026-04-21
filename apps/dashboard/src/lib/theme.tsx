@@ -19,10 +19,10 @@ function getSystemTheme(): "light" | "dark" {
 }
 
 function getStoredTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   const s = window.localStorage.getItem(STORAGE_KEY);
   if (s === "light" || s === "dark" || s === "system") return s;
-  return "dark"; // default to dark for this app's aesthetic
+  return "light"; // default to light — professional, welcoming for new users
 }
 
 function applyTheme(resolved: "light" | "dark") {

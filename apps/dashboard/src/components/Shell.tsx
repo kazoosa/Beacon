@@ -18,13 +18,13 @@ import {
 } from "./Icon";
 
 const NAV = [
-  { to: "/", label: "Overview", Icon: IconDashboard },
-  { to: "/holdings", label: "Holdings", Icon: IconLayers },
-  { to: "/transactions", label: "Transactions", Icon: IconArrows },
-  { to: "/dividends", label: "Dividends", Icon: IconCoins },
-  { to: "/allocation", label: "Allocation", Icon: IconPie },
-  { to: "/accounts", label: "Accounts", Icon: IconBuilding },
-  { to: "/settings", label: "Settings", Icon: IconSettings },
+  { to: "/app", label: "Overview", Icon: IconDashboard },
+  { to: "/app/holdings", label: "Holdings", Icon: IconLayers },
+  { to: "/app/transactions", label: "Transactions", Icon: IconArrows },
+  { to: "/app/dividends", label: "Dividends", Icon: IconCoins },
+  { to: "/app/allocation", label: "Allocation", Icon: IconPie },
+  { to: "/app/accounts", label: "Accounts", Icon: IconBuilding },
+  { to: "/app/settings", label: "Settings", Icon: IconSettings },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -62,7 +62,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <NavLink
               key={n.to}
               to={n.to}
-              end={n.to === "/"}
+              end={n.to === "/app"}
               className={({ isActive }) =>
                 clsx(
                   "flex items-center gap-3 px-5 py-2 text-[13px] transition-colors",

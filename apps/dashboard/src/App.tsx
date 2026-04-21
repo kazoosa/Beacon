@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 import { Shell } from "./components/Shell";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -18,20 +19,32 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <Shell>{children}</Shell>;
 }
 
+function RootRoute() {
+  const { accessToken } = useAuth();
+  // If logged in, send to the app. Otherwise show the marketing landing page.
+  if (accessToken) return <Navigate to="/app" replace />;
+  return <LandingPage />;
+}
+
 export function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/" element={<RequireAuth><OverviewPage /></RequireAuth>} />
-        <Route path="/holdings" element={<RequireAuth><HoldingsPage /></RequireAuth>} />
-        <Route path="/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
-        <Route path="/dividends" element={<RequireAuth><DividendsPage /></RequireAuth>} />
-        <Route path="/allocation" element={<RequireAuth><AllocationPage /></RequireAuth>} />
-        <Route path="/accounts" element={<RequireAuth><AccountsPage /></RequireAuth>} />
-        <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+          {/* Public marketing routes */}
+          <Route path="/" element={<RootRoute />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+
+          {/* Authenticated app routes — all under /app */}
+          <Route path="/app" element={<RequireAuth><OverviewPage /></RequireAuth>} />
+          <Route path="/app/holdings" element={<RequireAuth><HoldingsPage /></RequireAuth>} />
+          <Route path="/app/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
+          <Route path="/app/dividends" element={<RequireAuth><DividendsPage /></RequireAuth>} />
+          <Route path="/app/allocation" element={<RequireAuth><AllocationPage /></RequireAuth>} />
+          <Route path="/app/accounts" element={<RequireAuth><AccountsPage /></RequireAuth>} />
+          <Route path="/app/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

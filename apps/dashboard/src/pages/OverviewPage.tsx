@@ -124,7 +124,7 @@ export function OverviewPage() {
             <div className="card p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-fg-primary">Top holdings</h3>
-                <Link to="/holdings" className="text-xs text-fg-primary hover:underline">
+                <Link to="/app/holdings" className="text-xs text-fg-primary hover:underline">
                   See all →
                 </Link>
               </div>
@@ -158,7 +158,7 @@ export function OverviewPage() {
             <div className="card p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-fg-primary">Dividends — 12 mo</h3>
-                <Link to="/dividends" className="text-xs text-fg-primary hover:underline">
+                <Link to="/app/dividends" className="text-xs text-fg-primary hover:underline">
                   Details →
                 </Link>
               </div>
@@ -192,7 +192,7 @@ export function OverviewPage() {
             <div className="card p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-fg-primary">Recent activity</h3>
-                <Link to="/transactions" className="text-xs text-fg-primary hover:underline">
+                <Link to="/app/transactions" className="text-xs text-fg-primary hover:underline">
                   See all →
                 </Link>
               </div>
