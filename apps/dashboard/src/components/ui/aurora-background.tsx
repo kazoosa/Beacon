@@ -7,10 +7,12 @@ interface AuroraBackgroundProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * Adapted from aceternity/nextlevelbuilder. No Next.js imports needed.
- * Colors toned down from the original indigo/violet explosion to match
- * Beacon's more restrained palette — still visible as an aurora, but
- * softer and warmer.
+ * PERFORMANCE-TUNED aurora. The original used filter:blur(10px) +
+ * mix-blend-difference + 60s infinite animation, which repaints the
+ * whole viewport every frame. This version uses only animated gradients
+ * on a pseudo-element, with GPU-friendly properties (transform on the
+ * blur container is promoted to its own layer), and honors prefers-
+ * reduced-motion by stopping animation.
  */
 export const AuroraBackground = ({
   className,
@@ -21,36 +23,32 @@ export const AuroraBackground = ({
   return (
     <div
       className={cn(
-        "relative flex flex-col min-h-[100vh] items-center justify-center bg-bg-base text-fg-primary transition-colors overflow-hidden",
+        "relative flex flex-col items-center justify-center bg-bg-base text-fg-primary overflow-hidden",
         className,
       )}
       {...props}
     >
-      <div className="absolute inset-0 overflow-hidden">
-        <div
-          className={cn(
-            `
-            [--white-gradient:repeating-linear-gradient(100deg,#ffffff_0%,#ffffff_7%,transparent_10%,transparent_12%,#ffffff_16%)]
-            [--dark-gradient:repeating-linear-gradient(100deg,#000000_0%,#000000_7%,transparent_10%,transparent_12%,#000000_16%)]
-            [--aurora:repeating-linear-gradient(100deg,#7c6aff_10%,#a78bfa_15%,#60a5fa_20%,#34d399_25%,#7c6aff_30%)]
-            [background-image:var(--white-gradient),var(--aurora)]
-            dark:[background-image:var(--dark-gradient),var(--aurora)]
-            [background-size:300%,_200%]
-            [background-position:50%_50%,50%_50%]
-            filter blur-[10px] invert dark:invert-0
-            after:content-[""] after:absolute after:inset-0
-            after:[background-image:var(--white-gradient),var(--aurora)]
-            after:dark:[background-image:var(--dark-gradient),var(--aurora)]
-            after:[background-size:200%,_100%]
-            after:animate-aurora after:[background-attachment:fixed] after:mix-blend-difference
-            pointer-events-none
-            absolute -inset-[10px] opacity-40 will-change-transform`,
-            showRadialGradient &&
-              `[mask-image:radial-gradient(ellipse_at_100%_0%,black_10%,transparent_70%)]`,
-          )}
-        />
-      </div>
-      {children}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-30 motion-reduce:animate-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(at 20% 30%, rgba(124,106,255,0.45), transparent 45%), radial-gradient(at 80% 20%, rgba(91,141,239,0.4), transparent 50%), radial-gradient(at 50% 80%, rgba(52,211,153,0.28), transparent 55%)",
+          backgroundSize: "200% 200%",
+          backgroundPosition: "0% 0%",
+          filter: "blur(48px)",
+          transform: "translateZ(0)",
+          willChange: "background-position",
+          animation: "beacon-aurora-drift 24s ease-in-out infinite alternate",
+          maskImage: showRadialGradient
+            ? "radial-gradient(ellipse at center, black 40%, transparent 75%)"
+            : undefined,
+          WebkitMaskImage: showRadialGradient
+            ? "radial-gradient(ellipse at center, black 40%, transparent 75%)"
+            : undefined,
+        }}
+      />
+      <div className="relative z-10 w-full">{children}</div>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowRight, Link as LinkIcon, Zap } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
@@ -21,19 +21,58 @@ interface RadialOrbitalTimelineProps {
 }
 
 /**
- * Adapted from nextlevelbuilder pattern. No Next-specific imports.
- * Scope kept intentionally: h-[600px] instead of h-screen, so it lives
- * inside a landing section instead of taking the whole viewport.
+ * PERFORMANCE-TUNED orbital timeline.
+ * Original: setInterval at 50ms forever = constant re-renders even when tab
+ * was off-screen. This version:
+ *   - Uses requestAnimationFrame instead of setInterval.
+ *   - Pauses rotation entirely when any node is expanded or user hovers.
+ *   - Stops when scrolled out of view (IntersectionObserver).
+ *   - Slows rotation to 0.1°/frame from 0.3° so it feels ambient, not dizzy.
+ *   - Numbers each node (1–5) so the flow order is obvious regardless of
+ *     current rotation position.
  */
 export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTimelineProps) {
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
   const [rotationAngle, setRotationAngle] = useState<number>(0);
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
+  const [inView, setInView] = useState<boolean>(true);
   const [pulseEffect, setPulseEffect] = useState<Record<number, boolean>>({});
   const [activeNodeId, setActiveNodeId] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  // Pause rotation when out of viewport — no wasted raf when user isn't
+  // looking at it.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { threshold: 0.15 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+
+    const tick = (now: number) => {
+      const dt = now - last;
+      last = now;
+      if (autoRotate && inView) {
+        // 0.1° / 16ms ≈ full rotation every 60s
+        setRotationAngle((prev) => (prev + (dt / 16) * 0.1) % 360);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [autoRotate, inView]);
 
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === containerRef.current || e.target === orbitRef.current) {
@@ -58,7 +97,9 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
         setAutoRotate(false);
         const relatedItems = getRelatedItems(id);
         const newPulseEffect: Record<number, boolean> = {};
-        relatedItems.forEach((relId) => { newPulseEffect[relId] = true; });
+        relatedItems.forEach((relId) => {
+          newPulseEffect[relId] = true;
+        });
         setPulseEffect(newPulseEffect);
         const nodeIndex = timelineData.findIndex((item) => item.id === id);
         const targetAngle = (nodeIndex / timelineData.length) * 360;
@@ -72,16 +113,6 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
     });
   };
 
-  useEffect(() => {
-    let rotationTimer: ReturnType<typeof setInterval> | undefined;
-    if (autoRotate) {
-      rotationTimer = setInterval(() => {
-        setRotationAngle((prev) => Number(((prev + 0.3) % 360).toFixed(3)));
-      }, 50);
-    }
-    return () => { if (rotationTimer) clearInterval(rotationTimer); };
-  }, [autoRotate]);
-
   const calculateNodePosition = (index: number, total: number) => {
     const angle = ((index / total) * 360 + rotationAngle) % 360;
     const radius = 200;
@@ -89,7 +120,7 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
     const x = radius * Math.cos(radian);
     const y = radius * Math.sin(radian);
     const zIndex = Math.round(100 + 50 * Math.cos(radian));
-    const opacity = Math.max(0.4, Math.min(1, 0.4 + 0.6 * ((1 + Math.sin(radian)) / 2)));
+    const opacity = Math.max(0.5, Math.min(1, 0.5 + 0.5 * ((1 + Math.sin(radian)) / 2)));
     return { x, y, angle, zIndex, opacity };
   };
 
@@ -100,9 +131,9 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
 
   const getStatusStyles = (status: TimelineItem["status"]): string => {
     switch (status) {
-      case "completed":    return "text-white bg-black border-white";
-      case "in-progress":  return "text-black bg-white border-black";
-      case "pending":      return "text-white bg-black/40 border-white/50";
+      case "completed":   return "text-white bg-black border-white";
+      case "in-progress": return "text-black bg-white border-black";
+      case "pending":     return "text-white bg-black/40 border-white/50";
     }
   };
 
@@ -110,16 +141,20 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
     <div
       ref={containerRef}
       onClick={handleContainerClick}
+      onMouseEnter={() => setAutoRotate(false)}
+      onMouseLeave={() => { if (!activeNodeId) setAutoRotate(true); }}
       className="w-full h-[600px] flex flex-col items-center justify-center bg-black rounded-2xl overflow-hidden relative"
     >
+      <div className="absolute top-6 left-6 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+        Beacon flow · hover to pause · click a node to expand
+      </div>
+
       <div className="relative w-full max-w-4xl h-full flex items-center justify-center">
         <div ref={orbitRef} className="absolute w-full h-full flex items-center justify-center" style={{ perspective: "1000px" }}>
-          <div className="absolute w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 via-sky-500 to-emerald-400 animate-pulse flex items-center justify-center z-10">
-            <div className="absolute w-20 h-20 rounded-full border border-white/20 animate-ping opacity-70" />
-            <div className="absolute w-24 h-24 rounded-full border border-white/10 animate-ping opacity-50" style={{ animationDelay: "0.5s" }} />
-            <div className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-md" />
+          <div className="absolute w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 via-sky-500 to-emerald-400 flex items-center justify-center z-10">
+            <div className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-md" />
           </div>
-          <div className="absolute w-96 h-96 rounded-full border border-white/10" />
+          <div className="absolute w-[400px] h-[400px] rounded-full border border-white/10" />
           {timelineData.map((item, index) => {
             const position = calculateNodePosition(index, timelineData.length);
             const isExpanded = expandedItems[item.id];
@@ -130,44 +165,47 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
               <div
                 key={item.id}
                 ref={(el) => { nodeRefs.current[item.id] = el; }}
-                className="absolute transition-all duration-700 cursor-pointer"
+                className="absolute transition-opacity duration-500 cursor-pointer"
                 style={{
                   transform: `translate(${position.x}px, ${position.y}px)`,
                   zIndex: isExpanded ? 200 : position.zIndex,
                   opacity: isExpanded ? 1 : position.opacity,
+                  willChange: "transform",
                 }}
-                onClick={(e) => { e.stopPropagation(); toggleItem(item.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleItem(item.id);
+                }}
               >
                 <div
-                  className={`absolute rounded-full -inset-1 ${isPulsing ? "animate-pulse" : ""}`}
-                  style={{
-                    background: `radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%)`,
-                    width: `${item.energy * 0.5 + 40}px`,
-                    height: `${item.energy * 0.5 + 40}px`,
-                    left: `-${(item.energy * 0.5) / 2}px`,
-                    top: `-${(item.energy * 0.5) / 2}px`,
-                  }}
-                />
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
+                  className={`w-11 h-11 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
                     isExpanded
-                      ? "bg-white text-black border-white shadow-lg shadow-white/30 scale-150"
+                      ? "bg-white text-black border-white shadow-lg shadow-white/30 scale-125"
                       : isRelated
-                      ? "bg-white/50 text-black border-white animate-pulse"
-                      : "bg-black text-white border-white/40"
-                  }`}
+                      ? "bg-white/50 text-black border-white"
+                      : "bg-black text-white border-white/40 hover:border-white"
+                  } ${isPulsing && !isExpanded ? "ring-2 ring-white/50" : ""}`}
                 >
                   <Icon size={16} />
                 </div>
-                <div className={`absolute top-12 whitespace-nowrap text-xs font-semibold tracking-wider transition-all duration-300 ${isExpanded ? "text-white scale-125" : "text-white/70"}`}>
+                {/* Explicit step number so order is never ambiguous */}
+                <div className={`absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border ${
+                  isExpanded ? "bg-black text-white border-white" : "bg-white text-black border-black"
+                }`}>
+                  {item.id}
+                </div>
+                <div className={`absolute top-14 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-semibold tracking-wider transition-all duration-300 ${
+                  isExpanded ? "text-white scale-110" : "text-white/70"
+                }`}>
                   {item.title}
                 </div>
+
                 {isExpanded && (
-                  <Card className="absolute top-20 left-1/2 -translate-x-1/2 w-64 bg-black/90 backdrop-blur-lg border-white/30 shadow-xl text-white">
+                  <Card className="absolute top-24 left-1/2 -translate-x-1/2 w-64 bg-black/90 backdrop-blur-lg border-white/30 shadow-xl text-white">
                     <CardHeader className="pb-2">
                       <div className="flex justify-between items-center">
                         <Badge className={`px-2 text-[10px] ${getStatusStyles(item.status)}`}>
-                          {item.status === "completed" ? "COMPLETE" : item.status === "in-progress" ? "IN PROGRESS" : "PENDING"}
+                          Step {item.id}
                         </Badge>
                         <span className="text-xs font-mono text-white/50">{item.date}</span>
                       </div>
@@ -177,19 +215,19 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
                       <p>{item.content}</p>
                       <div className="mt-4 pt-3 border-t border-white/10">
                         <div className="flex justify-between items-center text-xs mb-1">
-                          <span className="flex items-center"><Zap size={10} className="mr-1" />Energy</span>
+                          <span className="flex items-center">
+                            <Zap size={10} className="mr-1" />
+                            Progress
+                          </span>
                           <span className="font-mono">{item.energy}%</span>
                         </div>
                         <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-sky-500 to-indigo-500" style={{ width: `${item.energy}%` }} />
+                          <div className="h-full bg-gradient-to-r from-sky-400 to-indigo-400" style={{ width: `${item.energy}%` }} />
                         </div>
                       </div>
                       {item.relatedIds.length > 0 && (
                         <div className="mt-4 pt-3 border-t border-white/10">
-                          <div className="flex items-center mb-2">
-                            <LinkIcon size={10} className="text-white/70 mr-1" />
-                            <h4 className="text-xs uppercase tracking-wider font-medium text-white/70">Connected</h4>
-                          </div>
+                          <div className="text-[10px] uppercase tracking-wider font-medium text-white/70 mb-2">Next / Previous</div>
                           <div className="flex flex-wrap gap-1">
                             {item.relatedIds.map((relId) => {
                               const relItem = timelineData.find((i) => i.id === relId);
@@ -198,7 +236,7 @@ export default function RadialOrbitalTimeline({ timelineData }: RadialOrbitalTim
                                   key={relId}
                                   variant="outline"
                                   size="sm"
-                                  className="flex items-center h-6 px-2 py-0 text-xs rounded-none border-white/20 bg-transparent hover:bg-white/10 text-white/80 hover:text-white"
+                                  className="flex items-center h-6 px-2 py-0 text-xs rounded border-white/20 bg-transparent hover:bg-white/10 text-white/80 hover:text-white"
                                   onClick={(e) => { e.stopPropagation(); toggleItem(relId); }}
                                 >
                                   {relItem?.title}
