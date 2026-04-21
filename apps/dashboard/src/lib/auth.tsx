@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AuthState {
   accessToken: string | null;
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const qc = useQueryClient();
   const [state, setState] = useState<AuthState>(() => {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "") as AuthState;
@@ -37,6 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  /**
+   * Wipe every cached query so switching accounts never shows stale data
+   * from the previous user. Called on every auth transition (login, logout,
+   * register, sign-out-all, delete-account).
+   */
+  function resetQueryCache() {
+    qc.clear();
+  }
 
   async function request(path: string, method: string, body?: unknown) {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -61,16 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string) {
     const r = await post("/api/auth/login", { email, password });
+    resetQueryCache();
     setState({ accessToken: r.access_token, refreshToken: r.refresh_token, developer: r.developer });
   }
   async function register(name: string, email: string, password: string) {
     const r = await post("/api/auth/register", { name, email, password });
+    resetQueryCache();
     setState({ accessToken: r.access_token, refreshToken: r.refresh_token, developer: r.developer });
   }
   async function logout() {
     if (state.refreshToken) {
       await post("/api/auth/logout", { refresh_token: state.refreshToken }).catch(() => {});
     }
+    resetQueryCache();
     setState({ accessToken: null, refreshToken: null, developer: null });
   }
 
@@ -88,11 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOutAll() {
     await request("/api/auth/sign-out-all", "POST", {});
+    resetQueryCache();
     setState({ accessToken: null, refreshToken: null, developer: null });
   }
 
   async function deleteAccount(confirm_email: string) {
     await request("/api/auth/me", "DELETE", { confirm_email });
+    resetQueryCache();
     setState({ accessToken: null, refreshToken: null, developer: null });
   }
 
