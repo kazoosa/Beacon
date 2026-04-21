@@ -3,8 +3,5 @@
   "buildCommand": "npm install --no-audit --no-fund && npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install --no-audit --no-fund",
-  "framework": null,
-  "rewrites": [
-    { "source": "/(?!api).*", "destination": "/index.html" }
-  ]
+  "framework": null
 }
