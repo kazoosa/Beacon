@@ -71,9 +71,19 @@ export function DemoPage() {
         } catch { /* fall through */ }
       }
 
+      // Hard client-side cap so the spinner can never hang. If the
+      // server takes more than 20s (cold-start + fresh seed of 4 items
+      // worth of holdings + transactions) we just navigate to /app —
+      // seeding continues server-side, and refreshing once back inside
+      // the dashboard picks up the finished data.
+      const HARD_TIMEOUT_MS = 20_000;
+      const ctrl = new AbortController();
+      const hardTimer = window.setTimeout(() => ctrl.abort(), HARD_TIMEOUT_MS);
+
       try {
         const res = await fetch(`${API}/api/portfolio/seed-demo`, {
           method: "POST",
+          signal: ctrl.signal,
           headers: {
             ...(freshToken ? { Authorization: `Bearer ${freshToken}` } : {}),
             "Content-Type": "application/json",
@@ -84,7 +94,12 @@ export function DemoPage() {
           console.warn("[demo] seed-demo returned", res.status);
         }
       } catch (err) {
-        console.warn("[demo] seed-demo fetch failed", err);
+        // Either the abort fired or the network failed — either way,
+        // don't block the user; they'll land in /app and can refresh if
+        // data hasn't appeared yet.
+        console.warn("[demo] seed-demo fetch aborted or failed", err);
+      } finally {
+        window.clearTimeout(hardTimer);
       }
 
       if (cancelled) return;

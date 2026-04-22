@@ -3,8 +3,13 @@
  * 4 brokerages (Fidelity, Schwab, Robinhood, Chase). Idempotent — skips
  * if the developer already has any Items.
  *
- * Used both at registration and via a "Load demo data" button for users
- * who want to explore before connecting real accounts through SnapTrade.
+ * Self-sufficient: upserts the Institution and Security tables first so
+ * it works even on a fresh database where the general `prisma seed`
+ * script was never run. That was the production bug — the demo
+ * developer existed but no institutions or securities did, so item
+ * creation blew up on a foreign-key error and nothing got seeded.
+ *
+ * Used both at registration and by the `/demo` auto-login flow.
  */
 import { prisma } from "../db.js";
 import { hashSecret, randomToken, sha256Hex } from "../utils/crypto.js";
@@ -16,12 +21,72 @@ import {
 } from "../utils/mockDataGenerator.js";
 import { generateInvestments, type SecurityRef } from "../utils/investmentGenerator.js";
 import { nanoid } from "nanoid";
+import { INSTITUTIONS } from "../constants/institutions.js";
+import { SECURITIES } from "../constants/securities.js";
+
+/**
+ * Idempotent upsert of every reference row the demo seed needs. Safe to
+ * call on every /demo hit; the per-item guard further below keeps the
+ * expensive work from running twice.
+ */
+async function ensureReferenceData(): Promise<SecurityRef[]> {
+  // Institutions
+  for (const i of INSTITUTIONS) {
+    await prisma.institution.upsert({
+      where: { id: i.id },
+      update: {
+        name: i.name,
+        primaryColor: i.primaryColor,
+        supportedProducts: i.supportedProducts,
+        routingNumbers: i.routingNumbers,
+      },
+      create: { ...i },
+    });
+  }
+
+  // Securities
+  const now = new Date();
+  const refs: SecurityRef[] = [];
+  for (const s of SECURITIES) {
+    const row = await prisma.security.upsert({
+      where: { tickerSymbol: s.tickerSymbol },
+      update: {
+        name: s.name,
+        type: s.type,
+        closePrice: s.closePrice,
+        closePriceAsOf: now,
+        exchange: s.exchange,
+      },
+      create: {
+        tickerSymbol: s.tickerSymbol,
+        name: s.name,
+        type: s.type,
+        closePrice: s.closePrice,
+        closePriceAsOf: now,
+        exchange: s.exchange,
+        isoCurrencyCode: "USD",
+      },
+    });
+    refs.push({
+      id: row.id,
+      tickerSymbol: row.tickerSymbol,
+      name: row.name,
+      closePrice: row.closePrice,
+      paysDividend: Boolean(s.paysDividend),
+    });
+  }
+  return refs;
+}
 
 export async function seedDemoPortfolioForDeveloper(
   developerId: string,
   developerEmail: string,
 ): Promise<{ created: boolean; itemCount: number }> {
-  // Resolve (or create) the developer's implicit application
+  // 0) Make sure institutions + securities exist. Cheap upsert — no-op
+  //    on the second call because every row already matches.
+  const refs = await ensureReferenceData();
+
+  // 1) Resolve (or create) the developer's implicit application
   let app = await prisma.application.findFirst({ where: { developerId } });
   if (!app) {
     app = await prisma.application.create({
@@ -37,24 +102,34 @@ export async function seedDemoPortfolioForDeveloper(
     });
   }
 
-  // Idempotent — bail if items already exist
-  const existingCount = await prisma.item.count({ where: { applicationId: app.id } });
-  if (existingCount > 0) return { created: false, itemCount: existingCount };
+  // 2) Idempotent — bail if we already have a healthy seed. "Healthy"
+  //    means at least one Item with at least one InvestmentHolding, so we
+  //    don't early-return on a broken half-seeded state (the exact
+  //    scenario the deployed demo was stuck in).
+  const existingItems = await prisma.item.findMany({
+    where: { applicationId: app.id },
+    select: { id: true },
+  });
+  if (existingItems.length > 0) {
+    const holdingsCount = await prisma.investmentHolding.count({
+      where: { account: { itemId: { in: existingItems.map((i) => i.id) } } },
+    });
+    if (holdingsCount > 0) {
+      return { created: false, itemCount: existingItems.length };
+    }
+    // Partial / broken seed — nuke and start over.
+    console.log(`[demoSeed] wiping ${existingItems.length} empty items for ${developerEmail}`);
+    await prisma.item.deleteMany({
+      where: { id: { in: existingItems.map((i) => i.id) } },
+    });
+  }
 
-  const securities = await prisma.security.findMany();
-  const refs: SecurityRef[] = securities.map((s) => ({
-    id: s.id,
-    tickerSymbol: s.tickerSymbol,
-    name: s.name,
-    closePrice: s.closePrice,
-    paysDividend: true,
-  }));
-
+  // 3) Create 4 mock brokerages worth of holdings, transactions, dividends
   const brokerages: Array<{ institutionId: string; products: string[] }> = [
     { institutionId: "ins_10", products: ["investments", "balance", "identity"] }, // Fidelity
-    { institutionId: "ins_9", products: ["investments", "balance", "identity"] }, // Schwab
+    { institutionId: "ins_9",  products: ["investments", "balance", "identity"] }, // Schwab
     { institutionId: "ins_12", products: ["investments", "balance", "identity"] }, // Robinhood
-    { institutionId: "ins_1", products: ["transactions", "auth", "balance", "identity"] }, // Chase
+    { institutionId: "ins_1",  products: ["transactions", "auth", "balance", "identity"] }, // Chase
   ];
 
   for (const b of brokerages) {

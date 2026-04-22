@@ -38,9 +38,15 @@ router.post("/seed-demo", async (req, res, next) => {
     const { seedDemoPortfolioForDeveloper } = await import(
       "../services/demoSeedService.js"
     );
+    const t0 = Date.now();
+    console.log(`[seed-demo] start developer=${dev.email}`);
     const out = await seedDemoPortfolioForDeveloper(dev.id, dev.email);
+    console.log(
+      `[seed-demo] done developer=${dev.email} created=${out.created} items=${out.itemCount} in ${Date.now() - t0}ms`,
+    );
     res.json(out);
   } catch (e) {
+    console.error("[seed-demo] failed", e);
     next(e);
   }
 });
