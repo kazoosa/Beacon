@@ -16,9 +16,10 @@ dividends from every brokerage you own into one dashboard. Auto-sync with
 
 ## What's new
 
-See [GitHub releases](https://github.com/kazoosa/Beacon/releases) and
-[commit history](https://github.com/kazoosa/Beacon/commits/main) for the
-up-to-date changelog. We keep notes in one place — here, not inside the
+The canonical changelog lives in [CHANGELOG.md](./CHANGELOG.md), with
+tagged releases published to
+[GitHub Releases](https://github.com/kazoosa/Beacon/releases). We keep
+those notes in one place — here on GitHub, not duplicated inside the
 app.
 
 ---

@@ -15,6 +15,9 @@ import { useAuth } from "../../lib/auth";
  * code: there was no code, and the step was a dead-end. This version
  * uses the real AuthProvider (email + password) and the shader's reverse
  * reveal plays only after a successful login.
+ *
+ * Demo credentials are NOT exposed here anymore — the "Try the demo"
+ * button on the landing goes straight to /demo, which auto-logs in.
  */
 
 type Uniforms = {
@@ -27,9 +30,6 @@ type Uniforms = {
 interface SignInPageProps {
   className?: string;
 }
-
-const DEMO_EMAIL = "demo@finlink.dev";
-const DEMO_PASSWORD = "demo1234";
 
 export const CanvasRevealEffect = ({
   animationSpeed = 10,
@@ -270,13 +270,6 @@ export const SignInPage = ({ className }: SignInPageProps) => {
     }
   }
 
-  function fillDemo() {
-    setMode("signin");
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    setError(null);
-  }
-
   return (
     <div className={cn("flex w-full flex-col min-h-screen bg-black relative", className)}>
       <div className="absolute inset-0 z-0">
@@ -414,14 +407,6 @@ export const SignInPage = ({ className }: SignInPageProps) => {
                           : (mode === "signin" ? "Sign in" : "Create account")}
                       </button>
                     </form>
-
-                    <button
-                      type="button"
-                      onClick={fillDemo}
-                      className="w-full rounded-full border border-white/15 bg-white/[0.03] text-white/80 hover:text-white hover:bg-white/10 transition-colors py-2.5 text-sm"
-                    >
-                      Try the demo account
-                    </button>
 
                     <p className="text-[10px] text-white/30 pt-2 leading-relaxed">
                       By continuing, you agree to Beacon's{" "}

@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- Canvas -->
+  <rect width="1200" height="630" fill="#ffffff"/>
+
+  <!-- Soft corner wash — matches the landing hero -->
+  <defs>
+    <radialGradient id="pinkWash" cx="100%" cy="0%" r="60%">
+      <stop offset="0%"  stop-color="#fb76fa" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#fb76fa" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violetWash" cx="110%" cy="30%" r="55%">
+      <stop offset="0%"  stop-color="#635bff" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#635bff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cornerViolet" cx="-10%" cy="100%" r="55%">
+      <stop offset="0%"  stop-color="#635bff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#635bff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cardShadow" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%"  stop-color="rgba(10,37,64,0.06)"/>
+      <stop offset="100%" stop-color="rgba(10,37,64,0)"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#pinkWash)"/>
+  <rect width="1200" height="630" fill="url(#violetWash)"/>
+  <rect width="1200" height="630" fill="url(#cornerViolet)"/>
+
+  <!-- Logo + wordmark -->
+  <g transform="translate(72 64)">
+    <!-- Beacon lighthouse mark — simplified -->
+    <g fill="#0a2540">
+      <rect x="14" y="8"  width="8"  height="30" rx="2"/>
+      <rect x="10" y="38" width="16" height="4"  rx="1"/>
+      <path d="M6 46 L30 46 L26 66 L10 66 Z"/>
+      <rect x="2" y="66" width="32" height="3" rx="1"/>
+    </g>
+    <text x="50" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          font-size="28" font-weight="700" fill="#0a2540" letter-spacing="-0.02em">
+      Beacon
+    </text>
+  </g>
+
+  <!-- Pill chip -->
+  <g transform="translate(72 180)">
+    <rect width="310" height="32" rx="16" fill="#efeeff"/>
+    <circle cx="22" cy="16" r="4" fill="#635bff"/>
+    <text x="36" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          font-size="13" font-weight="500" fill="#5246d7">
+      Free forever for 1 brokerage
+    </text>
+  </g>
+
+  <!-- Headline -->
+  <g transform="translate(72 240)">
+    <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          font-size="88" font-weight="700" fill="#0a2540" letter-spacing="-0.03em">
+      <tspan x="0" dy="0">Every brokerage.</tspan>
+      <tspan x="0" dy="92" fill="#4b5876">One dashboard.</tspan>
+    </text>
+  </g>
+
+  <!-- Sub copy -->
+  <g transform="translate(72 474)">
+    <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          font-size="20" font-weight="400" fill="#4b5876">
+      <tspan x="0" dy="0">Your positions, dividends, and transactions from 20+ brokerages</tspan>
+      <tspan x="0" dy="28">in one clean view. Read-only. Free to try.</tspan>
+    </text>
+  </g>
+
+  <!-- Right-side product card preview — tilted floating card -->
+  <g transform="translate(760 170) rotate(-3)">
+    <!-- drop shadow -->
+    <rect x="4" y="20" width="380" height="310" rx="20" fill="url(#cardShadow)"/>
+    <!-- card -->
+    <rect width="380" height="310" rx="20" fill="#ffffff" stroke="#e6ebf1" stroke-width="1"/>
+
+    <!-- card header -->
+    <text x="24" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          font-size="14" font-weight="600" fill="#0a2540">Holdings</text>
+    <text x="356" y="40" text-anchor="end"
+          font-family="'SF Mono', ui-monospace, monospace"
+          font-size="11" font-weight="500" fill="#8792a2"
+          letter-spacing="0.12em">42 POSITIONS</text>
+
+    <!-- Rows -->
+    <g transform="translate(20 66)">
+      <!-- Row 1 -->
+      <g>
+        <rect width="30" height="30" rx="6" fill="#fafbfc" stroke="#e6ebf1"/>
+        <text x="15" y="20" text-anchor="middle" font-family="'SF Mono', ui-monospace, monospace"
+              font-size="10" font-weight="700" fill="#0a2540">NVDA</text>
+        <text x="42" y="14" font-family="-apple-system, sans-serif" font-size="13" font-weight="500" fill="#0a2540">NVIDIA Corporation</text>
+        <text x="42" y="28" font-family="'SF Mono', monospace" font-size="10" fill="#8792a2">NVDA · NYSE</text>
+        <text x="340" y="14" text-anchor="end" font-family="'SF Mono', monospace" font-size="13" font-weight="500" fill="#0a2540">$38,440</text>
+        <text x="340" y="28" text-anchor="end" font-family="'SF Mono', monospace" font-size="10" fill="#059669">+3.21%</text>
+      </g>
+      <!-- Row 2 -->
+      <g transform="translate(0 46)">
+        <rect width="30" height="30" rx="6" fill="#fafbfc" stroke="#e6ebf1"/>
+        <text x="15" y="20" text-anchor="middle" font-family="'SF Mono', monospace" font-size="10" font-weight="700" fill="#0a2540">AAPL</text>
+        <text x="42" y="14" font-family="-apple-system, sans-serif" font-size="13" font-weight="500" fill="#0a2540">Apple Inc.</text>
+        <text x="42" y="28" font-family="'SF Mono', monospace" font-size="10" fill="#8792a2">AAPL · NYSE</text>
+        <text x="340" y="14" text-anchor="end" font-family="'SF Mono', monospace" font-size="13" font-weight="500" fill="#0a2540">$22,108</text>
+        <text x="340" y="28" text-anchor="end" font-family="'SF Mono', monospace" font-size="10" fill="#059669">+0.64%</text>
+      </g>
+      <!-- Row 3 -->
+      <g transform="translate(0 92)">
+        <rect width="30" height="30" rx="6" fill="#fafbfc" stroke="#e6ebf1"/>
+        <text x="15" y="20" text-anchor="middle" font-family="'SF Mono', monospace" font-size="10" font-weight="700" fill="#0a2540">VOO</text>
+        <text x="42" y="14" font-family="-apple-system, sans-serif" font-size="13" font-weight="500" fill="#0a2540">Vanguard S&amp;P 500 ETF</text>
+        <text x="42" y="28" font-family="'SF Mono', monospace" font-size="10" fill="#8792a2">VOO · NYSE</text>
+        <text x="340" y="14" text-anchor="end" font-family="'SF Mono', monospace" font-size="13" font-weight="500" fill="#0a2540">$31,880</text>
+        <text x="340" y="28" text-anchor="end" font-family="'SF Mono', monospace" font-size="10" fill="#059669">+0.42%</text>
+      </g>
+      <!-- Row 4 -->
+      <g transform="translate(0 138)">
+        <rect width="30" height="30" rx="6" fill="#fafbfc" stroke="#e6ebf1"/>
+        <text x="15" y="20" text-anchor="middle" font-family="'SF Mono', monospace" font-size="10" font-weight="700" fill="#0a2540">TSLA</text>
+        <text x="42" y="14" font-family="-apple-system, sans-serif" font-size="13" font-weight="500" fill="#0a2540">Tesla Inc.</text>
+        <text x="42" y="28" font-family="'SF Mono', monospace" font-size="10" fill="#8792a2">TSLA · NYSE</text>
+        <text x="340" y="14" text-anchor="end" font-family="'SF Mono', monospace" font-size="13" font-weight="500" fill="#0a2540">$14,520</text>
+        <text x="340" y="28" text-anchor="end" font-family="'SF Mono', monospace" font-size="10" fill="#e11d48">−1.18%</text>
+      </g>
+      <!-- Row 5 -->
+      <g transform="translate(0 184)">
+        <rect width="30" height="30" rx="6" fill="#fafbfc" stroke="#e6ebf1"/>
+        <text x="15" y="20" text-anchor="middle" font-family="'SF Mono', monospace" font-size="10" font-weight="700" fill="#0a2540">BTC</text>
+        <text x="42" y="14" font-family="-apple-system, sans-serif" font-size="13" font-weight="500" fill="#0a2540">Bitcoin</text>
+        <text x="42" y="28" font-family="'SF Mono', monospace" font-size="10" fill="#8792a2">BTC · Coinbase</text>
+        <text x="340" y="14" text-anchor="end" font-family="'SF Mono', monospace" font-size="13" font-weight="500" fill="#0a2540">$18,201</text>
+        <text x="340" y="28" text-anchor="end" font-family="'SF Mono', monospace" font-size="10" fill="#059669">+2.08%</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Bottom meta strip -->
+  <g transform="translate(72 582)">
+    <text font-family="'SF Mono', ui-monospace, monospace"
+          font-size="12" font-weight="500" fill="#8792a2" letter-spacing="0.14em">
+      VESLY-DASHBOARD.VERCEL.APP · PORTFOLIO TRACKER
+    </text>
+  </g>
+</svg>

@@ -2,7 +2,7 @@ import {
   UserPlus, Link2, LayoutDashboard, Coins, Scale,
   ShieldCheck, Upload, PieChart, LineChart, Bell, RefreshCw,
   Lock, Eye, CreditCard, ArrowUpRight, ArrowRight, Check, Plus, X,
-  TrendingUp,
+  TrendingUp, Menu,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -106,6 +106,15 @@ export function PreviewLandingPage() {
 /* ------------------------------------------------------------------- Nav */
 
 function NavBar() {
+  const [open, setOpen] = useState(false);
+  const links = [
+    { href: "#flow",     label: "How it works" },
+    { href: "#features", label: "Features" },
+    { href: "#pricing",  label: "Pricing" },
+    { href: "#security", label: "Security" },
+    { href: "#faq",      label: "FAQ" },
+  ];
+
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--stripe-hairline)] bg-white/90">
       <div className="max-w-[1111px] mx-auto px-6 h-14 flex items-center justify-between">
@@ -113,14 +122,10 @@ function NavBar() {
           <BeaconMark size={22} />
           <span className="font-semibold tracking-tight text-[15px]">{APP_NAME}</span>
         </Link>
+
+        {/* Desktop links */}
         <nav className="hidden md:flex items-center gap-1 text-[14px] text-[var(--stripe-ink-muted)]">
-          {[
-            { href: "#flow",     label: "How it works" },
-            { href: "#features", label: "Features" },
-            { href: "#pricing",  label: "Pricing" },
-            { href: "#security", label: "Security" },
-            { href: "#faq",      label: "FAQ" },
-          ].map((l) => (
+          {links.map((l) => (
             <a
               key={l.href}
               href={l.href}
@@ -130,6 +135,7 @@ function NavBar() {
             </a>
           ))}
         </nav>
+
         <div className="flex items-center gap-2">
           <Link to="/login" className="hidden sm:inline-flex items-center h-9 px-3 rounded-full text-[14px] text-[var(--stripe-ink-muted)] hover:text-[var(--stripe-ink)] transition-colors">
             Sign in
@@ -138,7 +144,44 @@ function NavBar() {
             Get started
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
+          {/* Mobile menu button */}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-label={open ? "Close menu" : "Open menu"}
+            className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-[var(--stripe-hairline)] text-[var(--stripe-ink-muted)] hover:text-[var(--stripe-ink)] hover:border-[var(--stripe-hairline-strong)] transition-colors"
+          >
+            {open ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
         </div>
+      </div>
+
+      {/* Mobile dropdown */}
+      <div
+        className={`md:hidden overflow-hidden border-t border-[var(--stripe-hairline)] transition-[max-height] duration-300 ease-out ${
+          open ? "max-h-[320px]" : "max-h-0"
+        }`}
+      >
+        <nav className="px-6 py-3 flex flex-col">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="py-2.5 text-[15px] text-[var(--stripe-ink-muted)] hover:text-[var(--stripe-ink)] transition-colors"
+            >
+              {l.label}
+            </a>
+          ))}
+          <Link
+            to="/login"
+            onClick={() => setOpen(false)}
+            className="py-2.5 text-[15px] text-[var(--stripe-ink-muted)] hover:text-[var(--stripe-ink)] transition-colors border-t border-[var(--stripe-hairline)] mt-2 pt-3"
+          >
+            Sign in
+          </Link>
+        </nav>
       </div>
     </header>
   );
@@ -174,7 +217,7 @@ function Hero() {
               Start free
               <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link to="/login" className="stripe-btn-ghost inline-flex items-center gap-1.5 text-[15px]">
+            <Link to="/demo" className="stripe-btn-ghost inline-flex items-center gap-1.5 text-[15px]">
               Try the demo
               <ArrowUpRight className="w-4 h-4" />
             </Link>
@@ -818,7 +861,7 @@ function FinalCta() {
                 Get started free
                 <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link to="/login" className="inline-flex items-center gap-1.5 rounded-full border border-white/30 text-white font-medium px-5 h-11 text-[14px] hover:bg-white/10 transition-colors">
+              <Link to="/demo" className="inline-flex items-center gap-1.5 rounded-full border border-white/30 text-white font-medium px-5 h-11 text-[14px] hover:bg-white/10 transition-colors">
                 Try the demo
                 <ArrowUpRight className="w-4 h-4" />
               </Link>
@@ -854,6 +897,14 @@ function Footer() {
           >
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Status
+          </a>
+          <a
+            href="https://github.com/kazoosa/Beacon/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-[var(--stripe-ink)] transition-colors"
+          >
+            What's new
           </a>
           <Link to="/terms"   className="hover:text-[var(--stripe-ink)] transition-colors">Terms</Link>
           <Link to="/privacy" className="hover:text-[var(--stripe-ink)] transition-colors">Privacy</Link>

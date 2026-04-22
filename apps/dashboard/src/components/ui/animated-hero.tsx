@@ -67,7 +67,7 @@ export function AnimatedHero() {
           </div>
           <div className="flex flex-row gap-3 flex-wrap justify-center">
             <Button size="lg" variant="outline" className="gap-2" asChild>
-              <Link to="/login"><Play className="w-4 h-4" /> Try the demo</Link>
+              <Link to="/demo"><Play className="w-4 h-4" /> Try the demo</Link>
             </Button>
             <Button size="lg" className="gap-2" asChild>
               <Link to="/register">Get started free <MoveRight className="w-4 h-4" /></Link>

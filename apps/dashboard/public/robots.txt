@@ -1,0 +1,17 @@
+# Beacon — portfolio tracker
+# Allow the marketing site to be indexed; keep the app behind auth
+# undiscoverable (there's nothing useful there for a logged-out crawler
+# anyway).
+
+User-agent: *
+Allow: /
+Allow: /landing
+Allow: /terms
+Allow: /privacy
+Disallow: /app
+Disallow: /app/
+Disallow: /demo
+Disallow: /login
+Disallow: /register
+
+Sitemap: https://vesly-dashboard.vercel.app/sitemap.xml

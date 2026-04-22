@@ -4,6 +4,7 @@ import { ThemeProvider } from "./lib/theme";
 import { Shell } from "./components/Shell";
 import { PreviewLandingPage } from "./pages/PreviewLandingPage";
 import { PreviewSignInPage } from "./pages/PreviewSignInPage";
+import { DemoPage } from "./pages/DemoPage";
 import { TermsPage, PrivacyPage } from "./pages/LegalPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { HoldingsPage } from "./pages/HoldingsPage";
@@ -38,6 +39,8 @@ export function App() {
           <Route path="/landing" element={<PreviewLandingPage />} />
           <Route path="/login" element={<PreviewSignInPage />} />
           <Route path="/register" element={<PreviewSignInPage />} />
+          {/* /demo auto-signs the user in as the seeded demo account */}
+          <Route path="/demo" element={<DemoPage />} />
 
           {/* Legacy preview aliases — keep links in the wild working */}
           <Route path="/preview-landing" element={<Navigate to="/landing" replace />} />
