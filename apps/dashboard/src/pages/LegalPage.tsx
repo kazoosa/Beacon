@@ -21,12 +21,12 @@ export function LegalLayout({
     <div className="min-h-screen bg-bg-base text-fg-primary">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-bg-base/80 border-b border-border-subtle">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <Link to="/preview-landing" className="flex items-center gap-2 font-semibold tracking-tight">
+          <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
             <BeaconMark size={22} />
             <span>{APP_NAME}</span>
           </Link>
           <Link
-            to="/preview-landing"
+            to="/"
             className="inline-flex items-center gap-1.5 text-sm text-fg-secondary hover:text-fg-primary transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -54,7 +54,7 @@ export function LegalLayout({
           <div className="flex gap-5">
             <Link to="/terms" className="hover:text-fg-primary transition-colors">Terms</Link>
             <Link to="/privacy" className="hover:text-fg-primary transition-colors">Privacy</Link>
-            <Link to="/preview-landing" className="hover:text-fg-primary transition-colors">Home</Link>
+            <Link to="/" className="hover:text-fg-primary transition-colors">Home</Link>
           </div>
           <span>© {new Date().getFullYear()} {APP_NAME}</span>
         </div>

@@ -2,12 +2,9 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 import { Shell } from "./components/Shell";
-import { LandingPage } from "./pages/LandingPage";
 import { PreviewLandingPage } from "./pages/PreviewLandingPage";
 import { PreviewSignInPage } from "./pages/PreviewSignInPage";
 import { TermsPage, PrivacyPage } from "./pages/LegalPage";
-import { LoginPage } from "./pages/LoginPage";
-import { RegisterPage } from "./pages/RegisterPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { HoldingsPage } from "./pages/HoldingsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
@@ -26,7 +23,7 @@ function RootRoute() {
   const { accessToken } = useAuth();
   // If logged in, send to the app. Otherwise show the marketing landing page.
   if (accessToken) return <Navigate to="/app" replace />;
-  return <LandingPage />;
+  return <PreviewLandingPage />;
 }
 
 export function App() {
@@ -36,12 +33,12 @@ export function App() {
         <Routes>
           {/* Public marketing routes */}
           <Route path="/" element={<RootRoute />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<PreviewSignInPage />} />
+          <Route path="/register" element={<PreviewSignInPage />} />
 
-          {/* PREVIEW — marketplace components under evaluation, not live UX */}
-          <Route path="/preview-landing" element={<PreviewLandingPage />} />
-          <Route path="/preview-signin" element={<PreviewSignInPage />} />
+          {/* Legacy preview aliases — keep links in the wild working */}
+          <Route path="/preview-landing" element={<Navigate to="/" replace />} />
+          <Route path="/preview-signin" element={<Navigate to="/login" replace />} />
 
           {/* Legal */}
           <Route path="/terms" element={<TermsPage />} />

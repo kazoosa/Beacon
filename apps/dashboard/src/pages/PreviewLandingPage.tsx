@@ -116,7 +116,6 @@ const differentiators = [
 export function PreviewLandingPage() {
   return (
     <div className="min-h-screen bg-bg-base text-fg-primary">
-      <PreviewBanner />
       <NavBar />
 
       {/* Hero */}
@@ -137,24 +136,13 @@ export function PreviewLandingPage() {
   );
 }
 
-/* --------------------------------------------------------------- Banner */
-
-function PreviewBanner() {
-  return (
-    <div className="bg-amber-100 dark:bg-amber-950/40 border-b border-amber-300 dark:border-amber-900 text-amber-900 dark:text-amber-100 text-[11px] text-center py-1.5 px-4">
-      <strong className="font-semibold">PREVIEW ROUTE</strong> — visual evaluation. Live landing is at{" "}
-      <Link to="/" className="underline font-medium">/</Link>.
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ Nav */
 
 function NavBar() {
   return (
     <header className="sticky top-0 z-50 backdrop-blur-md bg-bg-base/80 border-b border-border-subtle">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <Link to="/preview-landing" className="flex items-center gap-2 font-semibold tracking-tight">
+        <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <BeaconMark size={22} />
           <span>{APP_NAME}</span>
         </Link>
@@ -167,13 +155,13 @@ function NavBar() {
         </nav>
         <div className="flex items-center gap-2">
           <Link
-            to="/preview-signin"
+            to="/login"
             className="hidden sm:inline-flex items-center h-9 px-3 rounded-md text-sm text-fg-secondary hover:text-fg-primary hover:bg-bg-hover transition-colors"
           >
             Sign in
           </Link>
           <Link
-            to="/preview-signin"
+            to="/register"
             className="inline-flex items-center h-9 px-4 rounded-md bg-fg-primary text-bg-base text-sm font-medium hover:bg-fg-primary/90 transition-colors"
           >
             Get started
@@ -582,14 +570,14 @@ function FinalCta() {
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
-            to="/preview-signin"
+            to="/register"
             className="inline-flex items-center gap-2 h-12 px-6 rounded-md bg-fg-primary text-bg-base font-medium hover:bg-fg-primary/90 transition-colors group"
           >
             Get started free
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link
-            to="/preview-signin"
+            to="/login"
             className="inline-flex items-center h-12 px-6 rounded-md border border-border-strong text-fg-primary font-medium hover:bg-bg-hover transition-colors"
           >
             Try the demo
@@ -632,7 +620,7 @@ function Footer() {
           <Link to="/privacy" className="hover:text-fg-primary transition-colors">
             Privacy
           </Link>
-          <Link to="/preview-signin" className="hover:text-fg-primary transition-colors">
+          <Link to="/login" className="hover:text-fg-primary transition-colors">
             Sign in
           </Link>
         </div>
