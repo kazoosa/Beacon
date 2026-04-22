@@ -127,7 +127,10 @@ function NavBar() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--stripe-hairline)] bg-white/90">
+    <header
+      className="sticky top-0 z-50 border-b border-[var(--stripe-hairline)]"
+      style={{ backgroundColor: "rgba(249, 248, 246, 0.85)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+    >
       <div className="max-w-[1111px] mx-auto px-6 h-14 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 text-[var(--stripe-ink)]">
           <BeaconMark size={22} />
@@ -202,28 +205,35 @@ function NavBar() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden stripe-hero-bg">
-      <div className="relative max-w-[1111px] mx-auto px-6 pt-16 sm:pt-24 pb-20 sm:pb-28 grid lg:grid-cols-[1.1fr_1fr] gap-10 lg:gap-16 items-center">
+    <section className="relative overflow-hidden stripe-grain" style={{ backgroundColor: "var(--stripe-surface)" }}>
+      <div className="relative max-w-[1111px] mx-auto px-6 pt-20 sm:pt-28 pb-24 sm:pb-32 grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-20 items-center">
         {/* Left — copy */}
         <div>
-          <div className="stripe-chip mb-6">
+          <div className="stripe-chip mb-8">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--stripe-accent)]" />
             Free forever for 1 brokerage
           </div>
 
-          <h1 className="text-[44px] sm:text-[64px] lg:text-[76px] font-bold tracking-[-0.03em] leading-[1.02] text-[var(--stripe-ink)]">
+          {/* Serif editorial display type. Both lines full contrast — no
+              grey fade. An italic on the second line gives the
+              headline motion and character without a colour split. */}
+          <h1 className="stripe-display text-[56px] sm:text-[84px] lg:text-[104px] leading-[0.96] tracking-[-0.018em] text-[var(--stripe-ink)]">
             Every brokerage.
             <br />
-            <span className="text-[var(--stripe-ink-muted)]">One dashboard.</span>
+            <em className="stripe-display-italic">One dashboard.</em>
           </h1>
 
-          <p className="mt-6 max-w-[560px] text-[17px] leading-[1.55] text-[var(--stripe-ink-muted)]">
+          {/* Pain-first opener, then existing detail */}
+          <p className="mt-8 max-w-[560px] text-[18px] leading-[1.55] text-[var(--stripe-ink)] font-medium">
+            You use multiple brokerages. None of them talk to each other. Beacon fixes that.
+          </p>
+          <p className="mt-4 max-w-[560px] text-[16px] leading-[1.6] text-[var(--stripe-ink-muted)]">
             Beacon pulls in your holdings, dividends, and transactions from whatever brokerages you
             already use. Robinhood, Vanguard, IBKR, Coinbase, and about twenty more. Missing one?
             Upload a CSV and we'll parse it.
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-9 flex flex-wrap items-center gap-3">
             <Link to="/register" className="stripe-btn-primary inline-flex items-center gap-1.5 text-[15px]">
               Start free
               <ArrowRight className="w-4 h-4" />
@@ -234,15 +244,22 @@ function Hero() {
             </Link>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-[var(--stripe-ink-muted)]">
-            <span className="inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[var(--stripe-accent)]" /> No credit card</span>
-            <span className="inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[var(--stripe-accent)]" /> Read-only access</span>
-            <span className="inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[var(--stripe-accent)]" /> Cancel anytime</span>
+          <div className="mt-7 text-[13px] text-[var(--stripe-ink-faint)]">
+            No credit card <span className="mx-2 opacity-40">·</span>
+            Read-only access <span className="mx-2 opacity-40">·</span>
+            Cancel anytime
           </div>
         </div>
 
-        {/* Right — 3D card stack */}
-        <HeroStack />
+        {/* Right — 3D card stack, with a dark stage backdrop for context */}
+        <div className="relative">
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-0 rounded-[28px]"
+            style={{ backgroundColor: "rgba(15, 14, 13, 0.08)", transform: "translate(2%, 4%) rotate(-1deg)" }}
+          />
+          <HeroStack />
+        </div>
       </div>
     </section>
   );
@@ -435,15 +452,24 @@ function AllocationMock() {
 
 function BrokerMarquee() {
   return (
-    <section className="py-10 border-y border-[var(--stripe-hairline)] bg-white">
-      <div className="max-w-[1111px] mx-auto px-6">
-        <div className="text-center text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-6">
-          Works with
+    <section
+      className="border-y"
+      style={{
+        borderColor: "var(--stripe-hairline)",
+        backgroundColor: "var(--stripe-surface-sunk)",
+      }}
+    >
+      <div className="max-w-[1111px] mx-auto px-6 py-8">
+        <div className="flex items-center gap-6 mb-5">
+          <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)]">
+            Works with
+          </div>
+          <div className="h-px flex-1" style={{ backgroundColor: "var(--stripe-hairline)" }} />
+          <div className="text-[12px] text-[var(--stripe-ink-faint)] italic">
+            Drag to scroll
+          </div>
         </div>
         <BrokerMarqueeRow />
-        <div className="mt-6 text-center text-[12px] text-[var(--stripe-ink-muted)]">
-          Plus anything with a CSV export. Drag the row to scroll.
-        </div>
       </div>
     </section>
   );
@@ -459,20 +485,20 @@ function Manifesto() {
         <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-4">
           Why Beacon
         </div>
-        <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)] max-w-[900px]">
+        <h2 className="stripe-display text-[44px] sm:text-[68px] leading-[1.02] tracking-[-0.018em] text-[var(--stripe-ink)] max-w-[980px]">
           Your money is spread across half a dozen apps.{" "}
-          <span className="text-[var(--stripe-ink-muted)]">It shouldn't feel that way.</span>
+          <em className="stripe-display-italic text-[var(--stripe-ink-muted)]">It shouldn't feel that way.</em>
         </h2>
-        <div className="mt-10 grid md:grid-cols-3 gap-6 md:gap-12 max-w-[1000px]">
-          <p className="text-[15px] leading-[1.65] text-[var(--stripe-ink-muted)]">
+        <div className="mt-12 grid md:grid-cols-3 gap-8 md:gap-14 max-w-[1000px]">
+          <p className="text-[15px] leading-[1.7] text-[var(--stripe-ink-muted)]">
             We built Beacon because we were tired of logging into six brokerage apps to answer one
             question: <span className="text-[var(--stripe-ink)] font-medium">what do I actually own?</span>
           </p>
-          <p className="text-[15px] leading-[1.65] text-[var(--stripe-ink-muted)]">
+          <p className="text-[15px] leading-[1.7] text-[var(--stripe-ink-muted)]">
             Mint shut down. Personal Capital got swallowed. Snowball wants $10/month for a pie chart.
             The spreadsheet you keep promising to update hasn't been touched since March.
           </p>
-          <p className="text-[15px] leading-[1.65] text-[var(--stripe-ink-muted)]">
+          <p className="text-[15px] leading-[1.7] text-[var(--stripe-ink-muted)]">
             Beacon is the thing we wanted. One place for your positions, dividends, and transactions.
             Read-only. Cheap enough you never have to wonder whether it's worth the cost.
           </p>
@@ -487,16 +513,23 @@ function Manifesto() {
 function BeaconFlow() {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <section id="flow" className="py-24 sm:py-32 bg-[var(--stripe-surface-sunk)] border-y border-[var(--stripe-hairline)]">
+    <section
+      id="flow"
+      className="py-24 sm:py-32 border-y stripe-dark-grain"
+      style={{
+        backgroundColor: "var(--stripe-dark)",
+        borderColor: "transparent",
+      }}
+    >
       <div className="max-w-[1111px] mx-auto px-6">
         <div ref={ref} className="reveal text-center mb-12">
-          <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-white/50 mb-3">
             Beacon flow
           </div>
-          <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)] max-w-[900px] mx-auto">
-            Five steps. One portfolio.
+          <h2 className="stripe-display text-[44px] sm:text-[64px] leading-[1.02] tracking-[-0.018em] text-white max-w-[900px] mx-auto">
+            Five steps. <em className="stripe-display-italic text-white/70">One portfolio.</em>
           </h2>
-          <p className="mt-4 max-w-[560px] mx-auto text-[15px] text-[var(--stripe-ink-muted)]">
+          <p className="mt-5 max-w-[560px] mx-auto text-[15px] text-white/60">
             Hover or tap any node to read what happens. The orbit keeps drifting on its own, so you
             don't have to click through anything.
           </p>
@@ -512,20 +545,23 @@ function BeaconFlow() {
 function FeatureGrid() {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <section id="features" className="py-24 sm:py-32">
+    <section id="features" className="py-24 sm:py-32 stripe-grain" style={{ backgroundColor: "var(--stripe-surface)" }}>
       <div className="max-w-[1111px] mx-auto px-6">
-        <div ref={ref} className="reveal mb-14 max-w-[780px]">
+        <div ref={ref} className="reveal mb-16 max-w-[780px]">
           <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-3">
             Features
           </div>
-          <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)]">
-            The obvious stuff,{" "}
-            <span className="text-[var(--stripe-ink-muted)]">done properly. Plus a couple of things other trackers never got around to.</span>
+          <h2 className="stripe-display text-[44px] sm:text-[64px] leading-[1.02] tracking-[-0.018em] text-[var(--stripe-ink)]">
+            The obvious stuff, <em className="stripe-display-italic">done properly.</em>
+            <br />
+            Plus a couple of things other trackers never got around to.
           </h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        {/* Editorial 2-column — no card boxes. Numbered 01..06, generous
+            vertical rhythm, indigo left rule that expands on hover. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-14 gap-y-14">
           {features.map((f, i) => (
-            <FeatureCard key={f.title} feature={f} delay={i * 60} />
+            <FeatureItem key={f.title} feature={f} index={i} />
           ))}
         </div>
       </div>
@@ -533,33 +569,34 @@ function FeatureGrid() {
   );
 }
 
-function FeatureCard({
-  feature, delay,
+function FeatureItem({
+  feature, index,
 }: {
   feature: typeof features[number];
-  delay: number;
+  index: number;
 }) {
   const ref = useReveal<HTMLDivElement>();
-  const Icon = feature.icon;
   return (
-    <div ref={ref} className="reveal" style={{ transitionDelay: `${delay}ms` }}>
-      <div className="stripe-card p-7 h-full flex flex-col">
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center mb-5 text-[var(--stripe-accent)]"
-          style={{
-            background: "var(--stripe-accent-soft)",
-            boxShadow: "inset 0 0 0 1px rgba(99, 91, 255, 0.15)",
-          }}
-        >
-          <Icon className="w-5 h-5" />
-        </div>
-        <h3 className="text-[17px] font-bold tracking-tight text-[var(--stripe-ink)] mb-2">
-          {feature.title}
-        </h3>
-        <p className="text-[14px] leading-[1.55] text-[var(--stripe-ink-muted)]">
-          {feature.body}
-        </p>
+    <div
+      ref={ref}
+      className="reveal group relative pl-6"
+      style={{ transitionDelay: `${index * 80}ms` }}
+    >
+      {/* Thin indigo rule on the left — grows on hover */}
+      <span
+        aria-hidden
+        className="absolute left-0 top-1 bottom-1 w-[2px] transition-all duration-300 group-hover:w-[3px]"
+        style={{ backgroundColor: "var(--stripe-accent)" }}
+      />
+      <div className="text-[11px] font-mono tracking-[0.16em] text-[var(--stripe-accent)] mb-2">
+        {String(index + 1).padStart(2, "0")}
       </div>
+      <h3 className="stripe-display text-[26px] sm:text-[32px] leading-[1.05] tracking-[-0.01em] text-[var(--stripe-ink)] mb-3">
+        {feature.title}
+      </h3>
+      <p className="text-[15px] leading-[1.6] text-[var(--stripe-ink-muted)] max-w-[440px]">
+        {feature.body}
+      </p>
     </div>
   );
 }
@@ -569,19 +606,20 @@ function FeatureCard({
 function Differentiators() {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <section className="py-24 sm:py-32 bg-[var(--stripe-surface-sunk)] border-y border-[var(--stripe-hairline)]">
+    <section className="py-24 sm:py-32 stripe-grain" style={{ backgroundColor: "var(--stripe-surface-sunk)" }}>
       <div className="max-w-[1111px] mx-auto px-6">
-        <div ref={ref} className="reveal max-w-[900px] mb-12">
+        <div ref={ref} className="reveal max-w-[900px] mb-14">
           <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-3">
             What makes Beacon different
           </div>
-          <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)]">
-            Built for people who actually own more than one brokerage.
+          <h2 className="stripe-display text-[40px] sm:text-[60px] leading-[1.02] tracking-[-0.018em] text-[var(--stripe-ink)]">
+            Built for people who actually own{" "}
+            <em className="stripe-display-italic">more than one brokerage.</em>
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-          {differentiators.map((d) => (
-            <DiffCard key={d.title} item={d} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+          {differentiators.map((d, i) => (
+            <DiffItem key={d.title} item={d} index={i} />
           ))}
         </div>
       </div>
@@ -589,22 +627,19 @@ function Differentiators() {
   );
 }
 
-function DiffCard({ item }: { item: typeof differentiators[number] }) {
+function DiffItem({ item, index }: { item: typeof differentiators[number]; index: number }) {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <div ref={ref} className="reveal">
-      <div className="stripe-card p-7 h-full flex gap-4">
-        <div
-          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white"
-          style={{ background: "var(--stripe-accent)" }}
-        >
-          <Check className="w-4 h-4" strokeWidth={2.5} />
+    <div ref={ref} className="reveal border-t pt-8" style={{ borderColor: "var(--stripe-hairline)", transitionDelay: `${index * 60}ms` }}>
+      <div className="flex gap-4">
+        <div className="text-[11px] font-mono tracking-[0.16em] text-[var(--stripe-accent)] pt-1 flex-shrink-0">
+          {String(index + 1).padStart(2, "0")}
         </div>
         <div>
-          <h3 className="text-[17px] font-bold tracking-tight text-[var(--stripe-ink)] mb-1.5">
+          <h3 className="stripe-display text-[24px] sm:text-[28px] leading-[1.1] tracking-[-0.01em] text-[var(--stripe-ink)] mb-2">
             {item.title}
           </h3>
-          <p className="text-[14px] leading-[1.55] text-[var(--stripe-ink-muted)]">
+          <p className="text-[15px] leading-[1.65] text-[var(--stripe-ink-muted)]">
             {item.body}
           </p>
         </div>
@@ -630,10 +665,10 @@ function SecurityBand() {
           <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-3">
             Security
           </div>
-          <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)]">
+          <h2 className="stripe-display text-[40px] sm:text-[60px] leading-[1.02] tracking-[-0.018em] text-[var(--stripe-ink)]">
             Your money is your business.
             <br />
-            <span className="text-[var(--stripe-ink-muted)]">Your data is too.</span>
+            <em className="stripe-display-italic text-[var(--stripe-ink-muted)]">Your data is too.</em>
           </h2>
           <p className="mt-5 max-w-md text-[15px] leading-[1.65] text-[var(--stripe-ink-muted)]">
             Beacon is built to the same standards as the brokerages it connects to. In practice we
@@ -672,16 +707,20 @@ function SecurityBand() {
 function Pricing() {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <section id="pricing" className="py-24 sm:py-32 bg-[var(--stripe-surface-sunk)] border-y border-[var(--stripe-hairline)]">
+    <section
+      id="pricing"
+      className="py-24 sm:py-32 stripe-dark-grain"
+      style={{ backgroundColor: "var(--stripe-dark)" }}
+    >
       <div className="max-w-[1111px] mx-auto px-6">
-        <div ref={ref} className="reveal text-center mb-14 max-w-[640px] mx-auto">
-          <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-3">
+        <div ref={ref} className="reveal text-center mb-14 max-w-[720px] mx-auto">
+          <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-white/50 mb-3">
             Pricing
           </div>
-          <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)]">
-            Start free. Upgrade when you outgrow it.
+          <h2 className="stripe-display text-[40px] sm:text-[60px] leading-[1.02] tracking-[-0.018em] text-white">
+            Start free. <em className="stripe-display-italic text-white/70">Upgrade when you outgrow it.</em>
           </h2>
-          <p className="mt-4 text-[15px] text-[var(--stripe-ink-muted)]">
+          <p className="mt-5 text-[15px] text-white/60">
             No surprise fees. Cancel anytime. 14-day refund on every paid plan.
           </p>
         </div>
@@ -706,9 +745,14 @@ function PricingCard({
   return (
     <div ref={ref} className="reveal relative" style={{ transitionDelay: `${delay}ms` }}>
       <div
-        className={`relative h-full rounded-2xl p-7 sm:p-8 bg-white ${
-          accent ? "stripe-gradient-border shadow-[0_20px_40px_-20px_rgba(99,91,255,0.28)]" : "stripe-card"
-        } ${comingSoon ? "grayscale opacity-80" : ""}`}
+        className={`relative h-full rounded-xl p-7 sm:p-8 ${
+          accent
+            ? "stripe-gradient-border shadow-[0_24px_48px_-20px_rgba(91,91,214,0.45)]"
+            : "border border-white/10"
+        } ${comingSoon ? "grayscale opacity-60" : ""}`}
+        style={{
+          backgroundColor: accent ? "var(--stripe-dark-raised)" : "rgba(255, 255, 255, 0.03)",
+        }}
       >
         {tier.badge && !comingSoon && (
           <div
@@ -719,35 +763,40 @@ function PricingCard({
           </div>
         )}
 
-        <div className="text-[13px] font-semibold tracking-tight text-[var(--stripe-ink)]">{tier.name}</div>
+        <div className="text-[13px] font-semibold tracking-tight text-white">{tier.name}</div>
         <div className="mt-4 flex items-baseline gap-2">
-          <span className="text-[44px] sm:text-[52px] font-bold tracking-tight text-[var(--stripe-ink)]">
+          <span className="stripe-display text-[56px] sm:text-[64px] leading-none tracking-tight text-white">
             {tier.price}
           </span>
-          <span className="text-[13px] text-[var(--stripe-ink-muted)]">{tier.cadence}</span>
+          <span className="text-[13px] text-white/60">{tier.cadence}</span>
         </div>
         {tier.annual && (
-          <div className="mt-1 text-[12px] font-mono text-[var(--stripe-ink-muted)]">{tier.annual}</div>
+          <div className="mt-1 text-[12px] font-mono text-white/50">{tier.annual}</div>
         )}
-        <p className="mt-4 text-[14px] leading-[1.5] text-[var(--stripe-ink-muted)] min-h-[40px]">{tier.blurb}</p>
+        <p className="mt-4 text-[14px] leading-[1.55] text-white/65 min-h-[40px]">{tier.blurb}</p>
 
         {comingSoon ? (
-          <button disabled aria-disabled="true" className="mt-6 w-full inline-flex items-center justify-center gap-2 h-11 rounded-full border border-[var(--stripe-hairline)] text-[var(--stripe-ink-muted)] cursor-not-allowed text-[13px]">
+          <button disabled aria-disabled="true" className="mt-6 w-full inline-flex items-center justify-center gap-2 h-11 rounded-md border border-white/15 text-white/50 cursor-not-allowed text-[13px]">
             <X className="w-3.5 h-3.5" />
             {tier.cta}
           </button>
         ) : (
-          <Link to="/register" className={`mt-6 w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-full text-[13px] font-medium transition-all ${
-            accent ? "stripe-btn-primary" : "stripe-btn-ghost"
-          }`}>
+          <Link
+            to="/register"
+            className={`mt-6 w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-md text-[13px] font-medium transition-all ${
+              accent
+                ? "bg-[var(--stripe-accent)] text-white hover:bg-[var(--stripe-accent-strong)]"
+                : "border border-white/25 text-white hover:bg-white/10"
+            }`}
+          >
             {tier.cta}
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         )}
 
-        <div className="mt-6 h-px bg-[var(--stripe-hairline)]" />
+        <div className="mt-7 h-px bg-white/10" />
 
-        <ul className="mt-5 space-y-2.5 text-[13.5px] text-[var(--stripe-ink-muted)]">
+        <ul className="mt-5 space-y-2.5 text-[13.5px] text-white/70">
           {tier.features.map((f) => (
             <li key={f} className="flex items-start gap-2.5">
               <Check className="w-4 h-4 mt-0.5 text-[var(--stripe-accent)] flex-shrink-0" />
@@ -759,10 +808,13 @@ function PricingCard({
 
       {/* Elite coming-soon overlay */}
       {comingSoon && (
-        <div className="absolute inset-0 rounded-2xl flex items-center justify-center pointer-events-none">
-          <div className="absolute inset-0 rounded-2xl bg-[var(--stripe-surface-sunk)]/70" />
-          <div className="absolute inset-0 rounded-2xl border border-[var(--stripe-hairline)]" />
-          <div className="relative flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-[var(--stripe-hairline)] text-[var(--stripe-ink)] text-[12px] font-mono font-semibold tracking-wide shadow-md">
+        <div className="absolute inset-0 rounded-xl flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 rounded-xl" style={{ backgroundColor: "rgba(13, 13, 15, 0.7)" }} />
+          <div className="absolute inset-0 rounded-xl border border-white/10" />
+          <div
+            className="relative flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-white text-[12px] font-mono font-semibold tracking-wide shadow-md"
+            style={{ backgroundColor: "var(--stripe-dark-raised)" }}
+          >
             <X className="w-3.5 h-3.5" strokeWidth={2.5} />
             Coming soon
           </div>
@@ -778,27 +830,39 @@ function Faq() {
   const ref = useReveal<HTMLDivElement>();
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <section id="faq" className="py-24 sm:py-32">
+    <section id="faq" className="py-24 sm:py-32 stripe-grain" style={{ backgroundColor: "var(--stripe-surface)" }}>
       <div className="max-w-[880px] mx-auto px-6">
-        <div ref={ref} className="reveal text-center mb-12">
+        <div ref={ref} className="reveal text-center mb-14">
           <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-[var(--stripe-ink-faint)] mb-3">
             FAQ
           </div>
-          <h2 className="text-[34px] sm:text-[52px] font-bold tracking-[-0.02em] leading-[1.06] text-[var(--stripe-ink)]">
-            Questions people actually ask.
+          <h2 className="stripe-display text-[40px] sm:text-[60px] leading-[1.02] tracking-[-0.018em] text-[var(--stripe-ink)]">
+            Questions people <em className="stripe-display-italic">actually</em> ask.
           </h2>
           <p className="mt-4 text-[15px] text-[var(--stripe-ink-muted)]">
             Straight answers. If something's missing, email us and we'll add it.
           </p>
         </div>
-        <div className="rounded-2xl bg-white border border-[var(--stripe-hairline)] divide-y divide-[var(--stripe-hairline)] overflow-hidden">
+        <div
+          className="rounded-xl border overflow-hidden"
+          style={{
+            backgroundColor: "var(--stripe-surface-raised)",
+            borderColor: "var(--stripe-hairline)",
+          }}
+        >
           {faqItems.map((item, i) => (
-            <FaqRow
+            <div
               key={i}
-              item={item}
-              isOpen={open === i}
-              onToggle={() => setOpen(open === i ? null : i)}
-            />
+              style={{
+                borderTop: i === 0 ? "none" : "1px solid var(--stripe-hairline)",
+              }}
+            >
+              <FaqRow
+                item={item}
+                isOpen={open === i}
+                onToggle={() => setOpen(open === i ? null : i)}
+              />
+            </div>
           ))}
         </div>
       </div>
@@ -846,37 +910,36 @@ function FaqRow({
 function FinalCta() {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <section className="py-16 sm:py-24">
-      <div ref={ref} className="reveal max-w-[1111px] mx-auto px-6">
-        {/* Light card. One tasteful violet corner wash, otherwise white. */}
-        <div
-          className="relative overflow-hidden rounded-[28px] border border-[var(--stripe-hairline)] bg-white"
-          style={{
-            backgroundImage:
-              "radial-gradient(60% 80% at 100% 0%, rgba(99,91,255,0.10) 0%, transparent 55%), radial-gradient(40% 60% at 0% 100%, rgba(251,118,250,0.08) 0%, transparent 55%)",
-          }}
-        >
-          <div className="relative px-8 sm:px-16 py-16 sm:py-20 text-center">
-            <h2 className="text-[32px] sm:text-[56px] font-bold tracking-[-0.02em] leading-[1.04] text-[var(--stripe-ink)]">
-              Start tracking your whole portfolio.
-              <br />
-              <span className="text-[var(--stripe-ink-muted)]">In under five minutes.</span>
-            </h2>
-            <p className="mt-5 text-[15px] sm:text-[17px] text-[var(--stripe-ink-muted)] max-w-[560px] mx-auto leading-[1.55]">
-              Free for one brokerage. No credit card, no drip-to-paid trial, and nobody's
-              reselling your holdings to a data broker.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link to="/register" className="stripe-btn-primary inline-flex items-center gap-1.5 text-[14px]">
-                Get started free
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link to="/demo" className="stripe-btn-ghost inline-flex items-center gap-1.5 text-[14px]">
-                Try the demo
-                <ArrowUpRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
+    <section
+      className="relative stripe-cta-bg stripe-dark-grain"
+      style={{ color: "#ffffff" }}
+    >
+      <div ref={ref} className="reveal max-w-[1111px] mx-auto px-6 py-24 sm:py-32 text-center">
+        <div className="text-[11px] uppercase tracking-[0.18em] font-mono text-white/50 mb-4">
+          Ready when you are
+        </div>
+        <h2 className="stripe-display text-[48px] sm:text-[80px] leading-[1.0] tracking-[-0.018em] text-white max-w-[960px] mx-auto">
+          Start for free. <em className="stripe-display-italic text-white/70">No credit card.</em>
+        </h2>
+        <p className="mt-6 text-[15px] sm:text-[17px] text-white/70 max-w-[560px] mx-auto leading-[1.55]">
+          Free forever for one brokerage. Upgrade the day you add a second. Cancel whenever. Your
+          data's never resold.
+        </p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/register"
+            className="inline-flex items-center gap-1.5 rounded-md bg-white text-[var(--stripe-ink)] font-medium px-5 h-11 text-[14px] hover:bg-white/90 transition-colors"
+          >
+            Get started free
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link
+            to="/demo"
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/30 text-white font-medium px-5 h-11 text-[14px] hover:bg-white/10 transition-colors"
+          >
+            Try the demo
+            <ArrowUpRight className="w-4 h-4" />
+          </Link>
         </div>
       </div>
     </section>

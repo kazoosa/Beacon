@@ -37,6 +37,9 @@ export default {
         sans: ["Geist", "Inter", "system-ui", "-apple-system", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SF Mono", "Menlo", "monospace"],
         display: ["Source Code Pro", "JetBrains Mono", "ui-monospace", "monospace"],
+        // Editorial serif + humane sans used by the marketing landing.
+        editorial: ['"Instrument Serif"', "Georgia", "serif"],
+        body: ['"DM Sans"', "Geist", "Inter", "system-ui", "sans-serif"],
       },
       boxShadow: {
         card: "var(--shadow-card)",

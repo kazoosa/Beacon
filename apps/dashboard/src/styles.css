@@ -416,40 +416,72 @@ button:focus-visible,
    ============================================================ */
 
 :root {
-  --stripe-accent: #635bff;
-  --stripe-accent-strong: #5246d7;
-  --stripe-accent-soft: #efeeff;
-  --stripe-ink: #0a2540;
-  --stripe-ink-muted: #4b5876;
-  --stripe-ink-faint: #8792a2;
-  --stripe-hairline: #e6ebf1;
-  --stripe-hairline-strong: #d2dae2;
-  --stripe-surface: #ffffff;
-  --stripe-surface-sunk: #fafbfc;
+  --stripe-accent: #5b5bd6;           /* indigo, used boldly and sparingly */
+  --stripe-accent-strong: #4746b5;
+  --stripe-accent-soft: #ebebfa;
+
+  --stripe-ink: #0f0e0d;              /* near-black with warmth */
+  --stripe-ink-muted: #4a4741;
+  --stripe-ink-faint: #837e75;
+
+  --stripe-hairline: #e8e6e0;         /* warm hairline */
+  --stripe-hairline-strong: #d1cfc7;
+
+  --stripe-surface: #f9f8f6;           /* warm off-white (not pure white) */
+  --stripe-surface-raised: #ffffff;    /* for raised cards */
+  --stripe-surface-sunk: #f3f1ec;      /* slightly warmer shade */
+
+  --stripe-dark: #0d0d0f;              /* dark sections */
+  --stripe-dark-raised: #17171b;
+
   --stripe-ease: cubic-bezier(.25, 1, .5, 1);
 }
 
-/* Quiet hero wash — soft pink→violet sweep in the TOP-RIGHT corner
-   only. No all-over rainbow, no gradient mesh bath. Stripe-style:
-   barely-there color that reads "alive" without reading "AI landing". */
-.stripe-hero-bg {
-  background-color: #ffffff;
-  background-image:
-    radial-gradient(60% 50% at 100% -10%,  rgba(251, 118, 250, 0.18) 0%, transparent 60%),
-    radial-gradient(60% 50% at 110% 20%,   rgba(99, 91, 255, 0.20)  0%, transparent 55%),
-    radial-gradient(40% 40% at -10% 100%,  rgba(99, 91, 255, 0.08)  0%, transparent 55%);
+/* Grain overlay — SVG feTurbulence at ~4% opacity. Applied as a
+   ::before on any section that needs atmosphere. Small inline data
+   URI, no network round-trip, tiles seamlessly. */
+.stripe-grain {
+  position: relative;
 }
+.stripe-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: multiply;
+  z-index: 1;
+}
+.stripe-grain > * { position: relative; z-index: 2; }
 
-/* A deeper version for the final-CTA card only */
+/* Dark-section version, slightly stronger, screen-blend so it adds
+   highlights rather than shadows on a near-black surface. */
+.stripe-dark-grain {
+  position: relative;
+}
+.stripe-dark-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: screen;
+  z-index: 1;
+}
+.stripe-dark-grain > * { position: relative; z-index: 2; }
+
+/* Dark CTA / pricing background — two quiet indigo washes, no
+   rainbow mesh. */
 .stripe-cta-bg {
-  background-color: #0a2540;
+  background-color: var(--stripe-dark);
   background-image:
-    radial-gradient(60% 60% at 15% 0%,  rgba(99, 91, 255, 0.55) 0%, transparent 55%),
-    radial-gradient(55% 55% at 100% 0%, rgba(251, 118, 250, 0.32) 0%, transparent 55%),
-    radial-gradient(60% 60% at 85% 100%, rgba(99, 91, 255, 0.28) 0%, transparent 55%);
+    radial-gradient(60% 60% at 15% 0%, rgba(91, 91, 214, 0.22) 0%, transparent 55%),
+    radial-gradient(55% 55% at 100% 100%, rgba(91, 91, 214, 0.10) 0%, transparent 55%);
 }
 
-/* Thin gradient hairline for the featured pricing card only */
+/* Thin indigo hairline for the featured pricing card only */
 .stripe-gradient-border {
   position: relative;
 }
@@ -459,7 +491,7 @@ button:focus-visible,
   inset: 0;
   padding: 1.5px;
   border-radius: inherit;
-  background: linear-gradient(135deg, #635bff 0%, #9b8bff 60%, #fb76fa 100%);
+  background: linear-gradient(135deg, var(--stripe-accent) 0%, #8d8df0 100%);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -468,17 +500,17 @@ button:focus-visible,
   pointer-events: none;
 }
 
-/* Violet CTA */
+/* Indigo CTA — sharper 6px radius on landing per the refresh */
 .stripe-btn-primary {
   background: var(--stripe-accent);
   color: #ffffff;
-  border-radius: 999px;
+  border-radius: 6px;
   padding: 10px 18px;
   font-weight: 500;
   letter-spacing: -0.005em;
   box-shadow:
-    0 1px 1px rgba(10, 37, 64, 0.08),
-    0 2px 5px rgba(99, 91, 255, 0.28);
+    0 1px 1px rgba(15, 14, 13, 0.08),
+    0 2px 6px rgba(91, 91, 214, 0.30);
   transition: transform 150ms var(--stripe-ease),
               box-shadow 150ms var(--stripe-ease),
               background 150ms var(--stripe-ease);
@@ -487,23 +519,25 @@ button:focus-visible,
   background: var(--stripe-accent-strong);
   transform: translateY(-1px);
   box-shadow:
-    0 1px 1px rgba(10, 37, 64, 0.08),
-    0 8px 16px rgba(99, 91, 255, 0.28);
+    0 1px 1px rgba(15, 14, 13, 0.08),
+    0 8px 18px rgba(91, 91, 214, 0.32);
 }
 .stripe-btn-primary:active { transform: translateY(0); }
 
+/* Secondary: higher-contrast than a bare outline — near-black border
+   on warm surface, fills on hover. */
 .stripe-btn-ghost {
   background: transparent;
   color: var(--stripe-ink);
-  border: 1px solid rgba(10, 37, 64, 0.12);
-  border-radius: 999px;
+  border: 1px solid var(--stripe-ink);
+  border-radius: 6px;
   padding: 10px 18px;
   font-weight: 500;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 .stripe-btn-ghost:hover {
-  background: rgba(10, 37, 64, 0.03);
-  border-color: rgba(10, 37, 64, 0.24);
+  background: var(--stripe-ink);
+  color: var(--stripe-surface);
 }
 
 .stripe-chip {
@@ -519,28 +553,40 @@ button:focus-visible,
 }
 
 .stripe-card {
-  background: #ffffff;
+  background: var(--stripe-surface-raised);
   border: 1px solid var(--stripe-hairline);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow:
-    0 1px 2px rgba(10, 37, 64, 0.04),
-    0 6px 20px -6px rgba(10, 37, 64, 0.06);
+    0 1px 2px rgba(15, 14, 13, 0.04),
+    0 6px 20px -6px rgba(15, 14, 13, 0.06);
   transition: transform 180ms var(--stripe-ease),
               box-shadow 180ms var(--stripe-ease);
 }
 .stripe-card:hover {
   transform: translateY(-2px);
   box-shadow:
-    0 2px 4px rgba(10, 37, 64, 0.05),
-    0 16px 32px -12px rgba(10, 37, 64, 0.10);
+    0 2px 4px rgba(15, 14, 13, 0.05),
+    0 16px 32px -12px rgba(15, 14, 13, 0.10);
 }
 
 .stripe-shell {
   color-scheme: light;
   background: var(--stripe-surface);
   color: var(--stripe-ink);
+  font-family: "DM Sans", Geist, system-ui, sans-serif;
 }
 .stripe-shell .stripe-muted { color: var(--stripe-ink-muted); }
+
+/* Editorial display type — Instrument Serif. Slightly oversized line-height
+   trim using letter-spacing tightening so it doesn't feel loose. */
+.stripe-display {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.stripe-display em, .stripe-display-italic {
+  font-style: italic;
+}
 
 /* ------------------------------------------------------------------
    Broker logo marquee — infinite horizontal scroll of broker wordmarks.
