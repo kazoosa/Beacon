@@ -6,24 +6,19 @@ import { BeaconMark } from "../components/BeaconMark";
 import { APP_NAME } from "../lib/brand";
 
 /**
- * /demo — auto-signs the visitor in as the demo account, makes sure
- * their portfolio is seeded with realistic mock data, and then drops
+ * /demo — auto-signs the visitor in as the demo account and drops
  * them into the dashboard.
  *
- * The per-developer seed lives server-side behind
- * POST /api/portfolio/seed-demo. It's idempotent: if the demo account
- * already has items, it returns `{ created: false }` immediately;
- * otherwise it creates four mock brokerages with holdings,
- * transactions, and dividends. We call it on every demo login so the
- * flow is resilient to a fresh database that's never been seeded
- * (exactly what was happening in production).
+ * The backend's POST /api/auth/login detects demo@finlink.dev and
+ * runs seed-guarantee synchronously before returning tokens, so by
+ * the time login resolves here the portfolio data is already in
+ * place. No client-side seed call, no timeouts, no empty dashboards.
  */
 
 const DEMO_EMAIL = "demo@finlink.dev";
 const DEMO_PASSWORD = "demo1234";
-const API = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001";
 
-type Stage = "logging-in" | "seeding" | "error";
+type Stage = "logging-in" | "error";
 
 export function DemoPage() {
   const { accessToken, login } = useAuth();
@@ -39,7 +34,9 @@ export function DemoPage() {
     let cancelled = false;
 
     (async () => {
-      // 1) Log in as the demo account (unless we already have a session).
+      // Backend handles seeding synchronously inside the demo login
+      // route, so by the time this returns the portfolio is populated.
+      // No separate seed call, no timeouts, no races.
       if (!accessToken) {
         try {
           setStage("logging-in");
@@ -57,52 +54,6 @@ export function DemoPage() {
       }
 
       if (cancelled) return;
-      setStage("seeding");
-
-      // 2) Always run seed-demo — idempotent, and this fixes returning
-      //    visitors whose demo accounts were created before the seed
-      //    flow existed. The token the AuthProvider just set isn't
-      //    returned from login(), so grab it out of localStorage.
-      let freshToken: string | null = accessToken;
-      if (!freshToken) {
-        try {
-          const raw = localStorage.getItem("finlink_auth");
-          if (raw) freshToken = (JSON.parse(raw) as { accessToken: string | null }).accessToken;
-        } catch { /* fall through */ }
-      }
-
-      // Hard client-side cap so the spinner can never hang. If the
-      // server takes more than 20s (cold-start + fresh seed of 4 items
-      // worth of holdings + transactions) we just navigate to /app —
-      // seeding continues server-side, and refreshing once back inside
-      // the dashboard picks up the finished data.
-      const HARD_TIMEOUT_MS = 20_000;
-      const ctrl = new AbortController();
-      const hardTimer = window.setTimeout(() => ctrl.abort(), HARD_TIMEOUT_MS);
-
-      try {
-        const res = await fetch(`${API}/api/portfolio/seed-demo`, {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: {
-            ...(freshToken ? { Authorization: `Bearer ${freshToken}` } : {}),
-            "Content-Type": "application/json",
-          },
-          body: "{}",
-        });
-        if (!res.ok) {
-          console.warn("[demo] seed-demo returned", res.status);
-        }
-      } catch (err) {
-        // Either the abort fired or the network failed — either way,
-        // don't block the user; they'll land in /app and can refresh if
-        // data hasn't appeared yet.
-        console.warn("[demo] seed-demo fetch aborted or failed", err);
-      } finally {
-        window.clearTimeout(hardTimer);
-      }
-
-      if (cancelled) return;
       navigate("/app", { replace: true });
     })();
 
@@ -113,9 +64,7 @@ export function DemoPage() {
 
   return (
     <div className="stripe-shell min-h-screen flex flex-col">
-      <div aria-hidden className="fixed inset-0 pointer-events-none stripe-hero-bg" />
-
-      <header className="relative z-10 border-b border-[var(--stripe-hairline)] bg-white/90">
+      <header className="relative z-10 border-b border-[var(--stripe-hairline)]" style={{ backgroundColor: "rgba(249, 248, 246, 0.85)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
         <div className="max-w-[1111px] mx-auto px-6 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-[var(--stripe-ink)]">
             <BeaconMark size={22} />
@@ -137,23 +86,20 @@ export function DemoPage() {
             <>
               <div className="stripe-chip mb-6 mx-auto">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--stripe-accent)] animate-pulse" />
-                {stage === "logging-in" ? "Signing in" : "Loading portfolio"}
+                Opening your demo
               </div>
-              <h1 className="text-[32px] sm:text-[40px] font-bold tracking-[-0.02em] leading-[1.08] text-[var(--stripe-ink)]">
-                {stage === "logging-in"
-                  ? "Opening the demo…"
-                  : "Warming up a portfolio for you."}
+              <h1 className="stripe-display text-[36px] sm:text-[48px] leading-[1.04] tracking-[-0.018em] text-[var(--stripe-ink)]">
+                Warming up a portfolio for you.
               </h1>
-              <p className="mt-4 text-[15px] leading-[1.55] text-[var(--stripe-ink-muted)]">
-                {stage === "logging-in"
-                  ? "One second while we open your read-only demo session."
-                  : "Loading four seeded brokerages with a realistic stack of holdings, dividends, and transactions. First run takes a moment; subsequent visits are instant."}
+              <p className="mt-5 text-[15px] leading-[1.6] text-[var(--stripe-ink-muted)]">
+                Signing in, preparing four seeded brokerages with holdings, dividends, and
+                transactions. First visit may take up to 30 seconds; repeat visits are instant.
               </p>
               <div className="mt-8 flex justify-center">
                 <Spinner />
               </div>
               <p className="mt-8 text-[12px] text-[var(--stripe-ink-faint)]">
-                Read-only account. You can kick the tyres, nothing you do here touches real money.
+                Read-only account. Nothing you do here touches real money.
               </p>
             </>
           ) : (
