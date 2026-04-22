@@ -1,58 +1,103 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Home } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { BeaconMark } from "../components/BeaconMark";
 import { APP_NAME } from "../lib/brand";
 
 /**
- * /demo — auto-signs the visitor in as the demo account and drops them
- * into the dashboard. The credentials live here, not in the UI, so the
- * sign-in page can stop showing them.
+ * /demo — auto-signs the visitor in as the demo account, makes sure
+ * their portfolio is seeded with realistic mock data, and then drops
+ * them into the dashboard.
  *
- * If the user is already logged in, just forward straight to /app
- * instead of overwriting their session with the demo account.
+ * The per-developer seed lives server-side behind
+ * POST /api/portfolio/seed-demo. It's idempotent: if the demo account
+ * already has items, it returns `{ created: false }` immediately;
+ * otherwise it creates four mock brokerages with holdings,
+ * transactions, and dividends. We call it on every demo login so the
+ * flow is resilient to a fresh database that's never been seeded
+ * (exactly what was happening in production).
  */
 
 const DEMO_EMAIL = "demo@finlink.dev";
 const DEMO_PASSWORD = "demo1234";
+const API = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001";
 
-type Status = "idle" | "loading" | "ready" | "error";
+type Stage = "logging-in" | "seeding" | "error";
 
 export function DemoPage() {
   const { accessToken, login } = useAuth();
-  const [status, setStatus] = useState<Status>("idle");
+  const navigate = useNavigate();
+  const [stage, setStage] = useState<Stage>("logging-in");
   const [message, setMessage] = useState<string | null>(null);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (accessToken) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     let cancelled = false;
-    setStatus("loading");
+
     (async () => {
-      try {
-        await login(DEMO_EMAIL, DEMO_PASSWORD);
-        if (!cancelled) setStatus("ready");
-      } catch (err) {
-        if (cancelled) return;
-        const msg =
-          err instanceof Error && err.message
-            ? err.message
-            : "Couldn't open the demo right now.";
-        setMessage(msg);
-        setStatus("error");
+      // 1) Log in as the demo account (unless we already have a session).
+      if (!accessToken) {
+        try {
+          setStage("logging-in");
+          await login(DEMO_EMAIL, DEMO_PASSWORD);
+        } catch (err) {
+          if (cancelled) return;
+          const msg =
+            err instanceof Error && err.message
+              ? err.message
+              : "Couldn't sign into the demo account.";
+          setMessage(msg);
+          setStage("error");
+          return;
+        }
       }
+
+      if (cancelled) return;
+      setStage("seeding");
+
+      // 2) Always run seed-demo — idempotent, and this fixes returning
+      //    visitors whose demo accounts were created before the seed
+      //    flow existed. The token the AuthProvider just set isn't
+      //    returned from login(), so grab it out of localStorage.
+      let freshToken: string | null = accessToken;
+      if (!freshToken) {
+        try {
+          const raw = localStorage.getItem("finlink_auth");
+          if (raw) freshToken = (JSON.parse(raw) as { accessToken: string | null }).accessToken;
+        } catch { /* fall through */ }
+      }
+
+      try {
+        const res = await fetch(`${API}/api/portfolio/seed-demo`, {
+          method: "POST",
+          headers: {
+            ...(freshToken ? { Authorization: `Bearer ${freshToken}` } : {}),
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        });
+        if (!res.ok) {
+          console.warn("[demo] seed-demo returned", res.status);
+        }
+      } catch (err) {
+        console.warn("[demo] seed-demo fetch failed", err);
+      }
+
+      if (cancelled) return;
+      navigate("/app", { replace: true });
     })();
+
     return () => { cancelled = true; };
-  // Demo login is a one-shot effect on mount. Re-running on token change
-  // would fight the Navigate below.
+  // Intentionally one-shot on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (accessToken) return <Navigate to="/app" replace />;
-
   return (
     <div className="stripe-shell min-h-screen flex flex-col">
-      {/* Soft corner wash so it matches the landing aesthetic */}
       <div aria-hidden className="fixed inset-0 pointer-events-none stripe-hero-bg" />
 
       <header className="relative z-10 border-b border-[var(--stripe-hairline)] bg-white/90">
@@ -73,18 +118,21 @@ export function DemoPage() {
 
       <main className="relative z-10 flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-[440px] text-center">
-          {status !== "error" ? (
+          {stage !== "error" ? (
             <>
               <div className="stripe-chip mb-6 mx-auto">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--stripe-accent)] animate-pulse" />
-                Opening demo
+                {stage === "logging-in" ? "Signing in" : "Loading portfolio"}
               </div>
               <h1 className="text-[32px] sm:text-[40px] font-bold tracking-[-0.02em] leading-[1.08] text-[var(--stripe-ink)]">
-                Warming up a portfolio for you.
+                {stage === "logging-in"
+                  ? "Opening the demo…"
+                  : "Warming up a portfolio for you."}
               </h1>
               <p className="mt-4 text-[15px] leading-[1.55] text-[var(--stripe-ink-muted)]">
-                Logging in, loading two seeded brokerages, and pulling in a realistic stack of
-                holdings, dividends, and transactions. Give it a second.
+                {stage === "logging-in"
+                  ? "One second while we open your read-only demo session."
+                  : "Loading four seeded brokerages with a realistic stack of holdings, dividends, and transactions. First run takes a moment; subsequent visits are instant."}
               </p>
               <div className="mt-8 flex justify-center">
                 <Spinner />
