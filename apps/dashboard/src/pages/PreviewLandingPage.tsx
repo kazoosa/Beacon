@@ -607,16 +607,25 @@ function Footer() {
           <span className="text-fg-secondary font-medium">{APP_NAME}</span>
           <span>· © {new Date().getFullYear()}</span>
         </div>
-        <div className="flex items-center gap-5">
-          <Link to="/preview-signin" className="hover:text-fg-primary transition-colors">
-            Sign-in preview
-          </Link>
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <a href="#manifesto" className="hover:text-fg-primary transition-colors">
             Why Beacon
           </a>
           <a href="#features" className="hover:text-fg-primary transition-colors">
             Features
           </a>
+          <a href="#faq" className="hover:text-fg-primary transition-colors">
+            FAQ
+          </a>
+          <Link to="/terms" className="hover:text-fg-primary transition-colors">
+            Terms
+          </Link>
+          <Link to="/privacy" className="hover:text-fg-primary transition-colors">
+            Privacy
+          </Link>
+          <Link to="/preview-signin" className="hover:text-fg-primary transition-colors">
+            Sign in
+          </Link>
         </div>
       </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8 text-[11px] text-fg-muted/80 text-center sm:text-left">

@@ -5,6 +5,7 @@ import { Shell } from "./components/Shell";
 import { LandingPage } from "./pages/LandingPage";
 import { PreviewLandingPage } from "./pages/PreviewLandingPage";
 import { PreviewSignInPage } from "./pages/PreviewSignInPage";
+import { TermsPage, PrivacyPage } from "./pages/LegalPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -41,6 +42,10 @@ export function App() {
           {/* PREVIEW — marketplace components under evaluation, not live UX */}
           <Route path="/preview-landing" element={<PreviewLandingPage />} />
           <Route path="/preview-signin" element={<PreviewSignInPage />} />
+
+          {/* Legal */}
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
 
           {/* Authenticated app routes — all under /app */}
           <Route path="/app" element={<RequireAuth><OverviewPage /></RequireAuth>} />
