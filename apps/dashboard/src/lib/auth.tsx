@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { installAuthRefresh } from "./api";
 
 interface AuthState {
   accessToken: string | null;
@@ -60,6 +61,10 @@ function readStored(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [state, setState] = useState<AuthState>(readStored);
+  // Mirror state into a ref so the auto-refresh hook (registered once)
+  // always reads the latest tokens without needing to be re-registered.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     if (state.isDemo) {
@@ -77,6 +82,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem(SS_KEY);
     } catch { /* ignore */ }
   }, [state]);
+
+  // Install the refresh hook ONCE on mount. apiFetch will call it
+  // whenever a request comes back 401 — most commonly because the
+  // 15-minute access token has aged out. Without this, an expired
+  // token surfaced as empty arrays from /holdings, /transactions,
+  // /dividends — which looked exactly like "my CSV import was lost",
+  // because both produce the same "no data" UI.
+  useEffect(() => {
+    installAuthRefresh({
+      refresh: async () => {
+        const refreshToken = stateRef.current.refreshToken;
+        const isDemoNow = stateRef.current.isDemo;
+        // Demo sessions are minted via /api/demo/session and don't
+        // need a stored refresh token — just mint a new one.
+        if (isDemoNow) {
+          try {
+            const r = await fetch(`${API}/api/demo/session`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            });
+            if (!r.ok) return { accessToken: null };
+            const body = await r.json();
+            setState({
+              accessToken: body.access_token,
+              refreshToken: body.refresh_token,
+              developer: body.developer,
+              isDemo: true,
+            });
+            return { accessToken: body.access_token };
+          } catch {
+            return { accessToken: null };
+          }
+        }
+        if (!refreshToken) return { accessToken: null };
+        try {
+          const r = await fetch(`${API}/api/auth/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          });
+          if (!r.ok) return { accessToken: null };
+          const body = await r.json();
+          setState((s) => ({
+            ...s,
+            accessToken: body.access_token,
+            refreshToken: body.refresh_token,
+          }));
+          return { accessToken: body.access_token };
+        } catch {
+          return { accessToken: null };
+        }
+      },
+      signOut: () => {
+        // Refresh failed — drop the session entirely so the user lands
+        // on /login on the next render instead of staring at empty
+        // pages forever.
+        qc.clear();
+        setState(EMPTY);
+      },
+    });
+  }, [qc]);
 
   /**
    * Wipe every cached query so switching accounts never shows stale data

@@ -631,3 +631,176 @@ html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.16
   .kpi-value { font-size: 26px; }
   .infra-hero { font-size: 22px; }
 }
+
+/* ============================================================
+   Self-test card
+   ============================================================ */
+
+.selftest-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 18px 18px 4px;
+  margin-bottom: 28px;
+  transition: border-color 200ms ease;
+}
+
+.selftest-card.has-fail {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--border));
+}
+
+.selftest-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.selftest-summary { flex: 1; min-width: 0; }
+
+.selftest-headline {
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--fg);
+}
+.selftest-headline.tone-pos { color: var(--green); }
+.selftest-headline.tone-neg { color: var(--red); }
+.selftest-headline.tone-muted { color: var(--fg-muted); }
+
+.selftest-sub {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.selftest-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+}
+
+.selftest-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 14px;
+}
+
+.selftest-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--card-2);
+}
+
+.selftest-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.selftest-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.005em;
+}
+
+.selftest-group-count {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.selftest-group-count.fail { color: var(--red); }
+
+.selftest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.selftest-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  transition: background-color 120ms ease;
+}
+.selftest-row:first-child { border-top: none; }
+.selftest-row:hover { background: var(--card); }
+
+.selftest-icon {
+  display: inline-flex;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.selftest-row.ok .selftest-icon { color: var(--green); }
+.selftest-row.fail .selftest-icon { color: var(--red); }
+.selftest-row .selftest-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.selftest-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.selftest-name {
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.35;
+}
+
+.selftest-detail {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+.selftest-row.fail .selftest-detail { color: var(--red); }
+
+.selftest-duration {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--fg-fainter);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+
+/* ============================================================
+   Polish — gentle hover lift on card-shaped surfaces.
+   ============================================================ */
+.infra-card,
+.activity-card,
+.kpi-card,
+.selftest-card,
+.selftest-group {
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.infra-card:hover,
+.activity-card:hover,
+.kpi-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+}

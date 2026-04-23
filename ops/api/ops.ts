@@ -330,6 +330,266 @@ async function getHealth(): Promise<ServiceResult> {
   };
 }
 
+/* ----------------------------------------- self-test (live API battery) */
+
+/**
+ * End-to-end smoke battery against the deployed backend. Runs the
+ * critical paths the dashboard relies on:
+ *   1. Mint a demo session (demo developer must exist + have data)
+ *   2. Refresh the access token (catches the JWT_SECRET-rotated bug)
+ *   3. Fetch holdings, transactions, dividends, accounts as the demo user
+ *   4. List supported CSV brokers + auto-detect a Fidelity / IBKR header
+ *
+ * Surfaces pass / fail per test plus per-test duration. Each failed
+ * test rolls the whole "selftest" service into a warning so the
+ * status banner reflects "something is wrong" without flipping the
+ * overall ops page red.
+ */
+
+interface TestResult {
+  name: string;
+  group: string;
+  ok: boolean;
+  durationMs: number;
+  detail: string;
+}
+
+async function runTest(
+  group: string,
+  name: string,
+  fn: () => Promise<string>,
+): Promise<TestResult> {
+  const t0 = Date.now();
+  try {
+    const detail = await fn();
+    return { name, group, ok: true, durationMs: Date.now() - t0, detail };
+  } catch (err) {
+    return {
+      name,
+      group,
+      ok: false,
+      durationMs: Date.now() - t0,
+      detail: (err as Error).message ?? "unknown error",
+    };
+  }
+}
+
+async function getSelfTest(): Promise<ServiceResult> {
+  const apiBase =
+    process.env.BACKEND_API_URL ?? "https://vesly-backend.onrender.com";
+  const DEMO_EMAIL = "demo@finlink.dev";
+
+  let demoAccess = "";
+  let demoRefresh = "";
+
+  async function callJson<T = unknown>(
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
+    const res = await fetch(`${apiBase}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...((init.headers as Record<string, string> | undefined) ?? {}),
+      },
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error_message?: string };
+      throw Object.assign(new Error(body.error_message ?? `HTTP ${res.status}`), {
+        status: res.status,
+      });
+    }
+    return (await res.json()) as T;
+  }
+
+  const tests: TestResult[] = [];
+
+  tests.push(
+    await runTest("Health", "Backend reachable (/api/demo/status)", async () => {
+      const data = await callJson<{
+        demoDeveloperExists: boolean;
+        environment: string;
+        investmentHoldingCount: number;
+      }>("/api/demo/status");
+      if (!data.demoDeveloperExists) throw new Error("demo developer missing");
+      return `env=${data.environment}, ${data.investmentHoldingCount} demo holdings`;
+    }),
+  );
+
+  tests.push(
+    await runTest("Auth", "POST /api/demo/session mints a token", async () => {
+      const body = await callJson<{
+        access_token: string;
+        refresh_token: string;
+        developer: { email: string };
+      }>("/api/demo/session", { method: "POST" });
+      if (!body.access_token) throw new Error("no access_token");
+      if (body.developer.email !== DEMO_EMAIL)
+        throw new Error(`unexpected email ${body.developer.email}`);
+      demoAccess = body.access_token;
+      demoRefresh = body.refresh_token;
+      return `signed in as ${body.developer.email}`;
+    }),
+  );
+
+  tests.push(
+    await runTest("Auth", "Normal /login refuses the demo email", async () => {
+      let status: number | null = null;
+      try {
+        await callJson("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email: DEMO_EMAIL, password: "demo1234" }),
+        });
+      } catch (err) {
+        status = (err as { status?: number }).status ?? null;
+      }
+      if (status === 401) return "401 as expected";
+      throw new Error(`expected 401, got ${status ?? "200"}`);
+    }),
+  );
+
+  tests.push(
+    await runTest("Auth", "POST /api/auth/refresh swaps tokens", async () => {
+      if (!demoRefresh) throw new Error("no demo refresh token from earlier test");
+      const body = await callJson<{ access_token: string; refresh_token: string }>(
+        "/api/auth/refresh",
+        { method: "POST", body: JSON.stringify({ refresh_token: demoRefresh }) },
+      );
+      if (!body.access_token) throw new Error("no access_token in refresh response");
+      demoAccess = body.access_token;
+      demoRefresh = body.refresh_token;
+      return "swapped successfully";
+    }),
+  );
+
+  const authedHeaders = () => ({ Authorization: `Bearer ${demoAccess}` });
+
+  tests.push(
+    await runTest("Portfolio", "GET /portfolio/holdings", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const data = await callJson<{
+        holdings: Array<{ ticker_symbol: string }>;
+        total_value: number;
+      }>("/api/portfolio/holdings", { headers: authedHeaders() });
+      if (data.holdings.length === 0) throw new Error("no holdings returned");
+      return `${data.holdings.length} holdings, total $${data.total_value.toFixed(0)}`;
+    }),
+  );
+
+  tests.push(
+    await runTest("Portfolio", "GET /portfolio/transactions", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const data = await callJson<{
+        transactions: Array<unknown>;
+        total: number;
+      }>("/api/portfolio/transactions?count=10", { headers: authedHeaders() });
+      if (data.transactions.length === 0) throw new Error("no transactions returned");
+      return `${data.transactions.length} of ${data.total} transactions`;
+    }),
+  );
+
+  tests.push(
+    await runTest("Portfolio", "GET /portfolio/dividends", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const data = await callJson<{
+        by_month: Array<{ month: string }>;
+        ytd_total: number;
+        lifetime_total: number;
+      }>("/api/portfolio/dividends", { headers: authedHeaders() });
+      if (!Array.isArray(data.by_month) || data.by_month.length !== 12)
+        throw new Error(`expected 12 months, got ${data.by_month?.length}`);
+      return `lifetime $${data.lifetime_total.toFixed(0)}`;
+    }),
+  );
+
+  tests.push(
+    await runTest("Portfolio", "GET /portfolio/accounts", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const data = await callJson<{ accounts: Array<unknown> }>(
+        "/api/portfolio/accounts",
+        { headers: authedHeaders() },
+      );
+      return `${data.accounts.length} accounts`;
+    }),
+  );
+
+  tests.push(
+    await runTest("CSV", "GET /csv/brokers lists 7 brokers", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const data = await callJson<{
+        brokers: Array<{ key: string; label: string }>;
+      }>("/api/csv/brokers", { headers: authedHeaders() });
+      const expected = [
+        "fidelity",
+        "schwab",
+        "vanguard",
+        "robinhood",
+        "td_ameritrade",
+        "webull",
+        "ibkr",
+      ];
+      const have = new Set(data.brokers.map((b) => b.key));
+      const missing = expected.filter((k) => !have.has(k));
+      if (missing.length) throw new Error(`missing brokers: ${missing.join(", ")}`);
+      return `${data.brokers.length} brokers, all 7 expected present`;
+    }),
+  );
+
+  tests.push(
+    await runTest("CSV", "POST /csv/detect identifies Fidelity", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const csv =
+        "Account Number,Account Name,Symbol,Description,Quantity,Last Price,Cost Basis Total,Average Cost Basis,Type\nX12345,Test,AAPL,Apple,10,180,1500,150,Cash";
+      const data = await callJson<{ broker: string | null }>("/api/csv/detect", {
+        method: "POST",
+        headers: authedHeaders(),
+        body: JSON.stringify({ csv }),
+      });
+      if (data.broker !== "fidelity")
+        throw new Error(`expected fidelity, got ${data.broker}`);
+      return "detected fidelity";
+    }),
+  );
+
+  tests.push(
+    await runTest("CSV", "POST /csv/detect identifies IBKR", async () => {
+      if (!demoAccess) throw new Error("no demo token");
+      const csv =
+        "Symbol,Asset Class,Quantity,MarkPrice,CostBasisPrice,PositionValue\nAAPL,STK,10,180,150,1800";
+      const data = await callJson<{ broker: string | null }>("/api/csv/detect", {
+        method: "POST",
+        headers: authedHeaders(),
+        body: JSON.stringify({ csv }),
+      });
+      if (data.broker !== "ibkr")
+        throw new Error(`expected ibkr, got ${data.broker}`);
+      return "detected ibkr";
+    }),
+  );
+
+  const passing = tests.filter((t) => t.ok).length;
+  const failing = tests.length - passing;
+  const status: Status = failing === 0 ? "ok" : passing === 0 ? "error" : "warn";
+  const totalMs = tests.reduce((s, t) => s + t.durationMs, 0);
+
+  return {
+    status,
+    data: {
+      passing,
+      failing,
+      total: tests.length,
+      totalMs,
+      _tests: tests.map((t) => ({
+        title: `${t.ok ? "✔" : "✘"} ${t.name}`,
+        time: `${t.durationMs} ms`,
+        group: t.group,
+        ok: t.ok,
+        detail: t.detail,
+      })),
+    },
+  };
+}
+
 /* --------------------------------------------------------- handler */
 
 export default async function handler(req: Request): Promise<Response> {
@@ -348,7 +608,7 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
-  const [business, render, vercel, neon, upstash, github, health] = await Promise.all([
+  const [business, render, vercel, neon, upstash, github, health, selftest] = await Promise.all([
     safe("business", getBusinessMetrics),
     safe("render", getRender),
     safe("vercel", getVercel),
@@ -356,13 +616,14 @@ export default async function handler(req: Request): Promise<Response> {
     safe("upstash", getUpstash),
     safe("github", getGitHub),
     safe("health", getHealth),
+    safe("selftest", getSelfTest),
   ]);
 
   return new Response(
     JSON.stringify({
       ok: true,
       timestamp: new Date().toISOString(),
-      services: { business, render, vercel, neon, upstash, github, health },
+      services: { business, render, vercel, neon, upstash, github, health, selftest },
     }),
     {
       status: 200,

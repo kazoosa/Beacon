@@ -4,11 +4,22 @@ import { KpiGrid } from "./components/KpiGrid";
 import { StatusBanner } from "./components/StatusBanner";
 import { InfraCard } from "./components/InfraCard";
 import { ActivityCard } from "./components/ActivityCard";
+import { SelfTestCard } from "./components/SelfTestCard";
+import { BeaconMark } from "./components/BeaconMark";
 
 type OpsPayload = {
   ok: boolean;
   timestamp: string;
-  services: Record<string, ServiceData>;
+  services: Record<string, ServiceData> & {
+    business?: ServiceData;
+    render?: ServiceData;
+    vercel?: ServiceData;
+    neon?: ServiceData;
+    upstash?: ServiceData;
+    github?: ServiceData;
+    health?: ServiceData;
+    selftest?: ServiceData;
+  };
 };
 
 type Status = "ok" | "warn" | "error" | "unconfigured";
@@ -126,7 +137,9 @@ export function App() {
     return (
       <div className="login-shell">
         <div className="login">
-          <div className="login-logo">B</div>
+          <div className="login-logo">
+            <BeaconMark size={28} />
+          </div>
           <h2>Beacon Ops</h2>
           <p>Enter the password to see your dashboard.</p>
           <form onSubmit={doLogin}>
@@ -156,7 +169,9 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">B</div>
+          <div className="brand-mark">
+            <BeaconMark size={20} />
+          </div>
           <div>
             <div className="brand-name">Beacon Ops</div>
             <div className="brand-sub">Mission control</div>
@@ -357,6 +372,17 @@ export function App() {
               emptyMessage="No signups yet. First one will show up here."
             />
           </div>
+
+          <SectionHeader
+            icon={<Icon.Beaker />}
+            title="Self-test"
+            subtitle="Live API smoke battery against the deployed backend"
+          />
+          <SelfTestCard
+            service={s.selftest}
+            onRerun={fetchOps}
+            rerunning={loading}
+          />
         </>
       )}
 
@@ -393,6 +419,10 @@ function rollUpStatus(services: Record<string, ServiceData>): Status {
   const filtered = Object.entries(services).map(([name, sd]) => {
     // GitHub rate-limit = warning, not real outage
     if (name === "github" && sd.status === "error") return "warn" as const;
+    // Self-test is informational — a failing test surfaces in its own
+    // section. Don't roll it up to red on the master banner; demote
+    // to warning so users still see something is off.
+    if (name === "selftest" && sd.status === "error") return "warn" as const;
     return sd.status;
   });
   if (filtered.includes("error")) return "error";

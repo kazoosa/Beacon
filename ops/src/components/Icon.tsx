@@ -115,4 +115,40 @@ export const Icon = {
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   ),
+  Beaker: (p: React.SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}>
+      <path d="M9 2h6M10 2v7L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-6-11V2" />
+      <path d="M7 14h10" />
+    </svg>
+  ),
+  CircleDashed: (p: React.SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}>
+      <path d="M10.1 2.18a10 10 0 0 1 3.8 0M5.7 4.4a10 10 0 0 1 2.7-1.6M21.82 10.1a10 10 0 0 1 0 3.8M19.6 18.3a10 10 0 0 1-1.6 2.7M13.9 21.82a10 10 0 0 1-3.8 0M2.18 13.9a10 10 0 0 1 0-3.8M4.4 5.7a10 10 0 0 1 1.6-2.7M18.3 4.4a10 10 0 0 1 2.7 2.7M5.7 19.6a10 10 0 0 1-2.7-1.6" />
+    </svg>
+  ),
+  XCircle: (p: React.SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  ),
+  CheckCircle: (p: React.SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="9 12 12 15 16 10" />
+    </svg>
+  ),
+  Loader: (p: React.SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}>
+      <line x1="12" y1="2" x2="12" y2="6" />
+      <line x1="12" y1="18" x2="12" y2="22" />
+      <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
+      <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
+      <line x1="2" y1="12" x2="6" y2="12" />
+      <line x1="18" y1="12" x2="22" y2="12" />
+      <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" />
+      <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" />
+    </svg>
+  ),
 };
