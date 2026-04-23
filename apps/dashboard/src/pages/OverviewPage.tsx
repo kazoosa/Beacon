@@ -5,6 +5,7 @@ import { fmtUsd, fmtPct, PlText } from "../components/money";
 import { Link } from "react-router-dom";
 import { useChartTheme, tooltipProps } from "../lib/chartTheme";
 import { TickerAvatar } from "./stocks/StockDetail";
+import { useTo } from "../lib/basePath";
 import {
   AreaChart,
   Area,
@@ -64,6 +65,7 @@ export function OverviewPage() {
   const { accessToken } = useAuth();
   const f = apiFetch(() => accessToken);
   const ct = useChartTheme();
+  const to = useTo();
 
   const summary = useQuery({ queryKey: ["summary"], queryFn: () => f<Summary>("/api/portfolio/summary") });
   const holdings = useQuery({ queryKey: ["holdings"], queryFn: () => f<HoldingsResp>("/api/portfolio/holdings") });
@@ -118,7 +120,7 @@ export function OverviewPage() {
           <p className="text-sm text-fg-secondary max-w-md mx-auto mb-5">
             Use the <span className="text-fg-primary font-medium">+ Connect brokerage</span> button in the sidebar to link your first account.
           </p>
-          <Link to="/app/accounts" className="btn-primary text-xs inline-flex">
+          <Link to={to("accounts")} className="btn-primary text-xs inline-flex">
             Go to Accounts
           </Link>
           <p className="text-[10px] text-fg-muted mt-5">
@@ -134,7 +136,7 @@ export function OverviewPage() {
             <div className="card p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-fg-primary">Top holdings</h3>
-                <Link to="/app/holdings" className="text-xs text-fg-primary hover:underline">
+                <Link to={to("holdings")} className="text-xs text-fg-primary hover:underline">
                   See all →
                 </Link>
               </div>
@@ -142,7 +144,7 @@ export function OverviewPage() {
                 {holdings.data?.holdings.slice(0, 6).map((h) => (
                   <Link
                     key={h.ticker_symbol}
-                    to={`/app/stocks?symbol=${encodeURIComponent(h.ticker_symbol)}`}
+                    to={`${to("stocks")}?symbol=${encodeURIComponent(h.ticker_symbol)}`}
                     className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-md hover:bg-bg-hover/60 border-b border-border-subtle/50 last:border-0 transition-colors"
                   >
                     <TickerAvatar symbol={h.ticker_symbol} size={36} />
@@ -172,7 +174,7 @@ export function OverviewPage() {
             <div className="card p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-fg-primary">Dividends — 12 mo</h3>
-                <Link to="/app/dividends" className="text-xs text-fg-primary hover:underline">
+                <Link to={to("dividends")} className="text-xs text-fg-primary hover:underline">
                   Details →
                 </Link>
               </div>
@@ -206,7 +208,7 @@ export function OverviewPage() {
             <div className="card p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-fg-primary">Recent activity</h3>
-                <Link to="/app/transactions" className="text-xs text-fg-primary hover:underline">
+                <Link to={to("transactions")} className="text-xs text-fg-primary hover:underline">
                   See all →
                 </Link>
               </div>

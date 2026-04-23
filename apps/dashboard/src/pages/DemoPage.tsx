@@ -1,25 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowRight, Home, AlertCircle } from "lucide-react";
-import { useAuth } from "../lib/auth";
 import { BeaconMark } from "../components/BeaconMark";
 import { APP_NAME } from "../lib/brand";
 
 /**
- * /demo — signs the visitor in as the demo account.
+ * Loading + error UI shown while a `/demo/*` route is provisioning a
+ * shared-demo session. Mounted by RequireDemo (App.tsx) — RequireDemo
+ * is the one that calls loginDemo(); this page only renders state.
  *
- * Before attempting login we fetch /api/demo/status, a public no-auth
- * diagnostic endpoint that reports whether the backend is reachable
- * and whether the demo account actually has data. If the status call
- * fails, or reports zero investment holdings, we STOP and render a
- * visible error panel instead of silently navigating the user into an
- * empty dashboard. Every previous "the demo doesn't load" report was
- * because we ate the failure and navigated anyway. No more.
+ * It also runs a pre-flight against /api/demo/status so a stale or
+ * un-seeded backend surfaces a visible diagnostic instead of silently
+ * landing the visitor on an empty dashboard.
  */
 
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001";
-
-type Stage = "checking" | "logging-in" | "ok" | "error";
 
 interface DemoStatus {
   demoDeveloperExists: boolean;
@@ -34,39 +29,37 @@ interface DemoStatus {
 }
 
 export function DemoPage() {
-  const { loginDemo } = useAuth();
-  const navigate = useNavigate();
-  const [stage, setStage] = useState<Stage>("checking");
   const [status, setStatus] = useState<DemoStatus | null>(null);
   const [errorTitle, setErrorTitle] = useState<string>("");
   const [errorDetail, setErrorDetail] = useState<string>("");
-  const startedRef = useRef(false);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-
-    // Demo sessions are isolated to this tab via sessionStorage (see
-    // auth.tsx). We deliberately do NOT touch localStorage here — other
-    // tabs signed into a real account must stay signed into that
-    // account when this tab enters the demo.
-
     let cancelled = false;
-
     (async () => {
-      // Phase 1 — reach the backend and check demo-data health.
-      let s: DemoStatus | null = null;
       try {
-        setStage("checking");
         const r = await fetch(`${API}/api/demo/status`, {
           headers: { Accept: "application/json" },
         });
-        if (!r.ok) {
-          throw new Error(`Status endpoint returned HTTP ${r.status}`);
-        }
-        s = (await r.json()) as DemoStatus;
+        if (!r.ok) throw new Error(`Status endpoint returned HTTP ${r.status}`);
+        const s = (await r.json()) as DemoStatus;
         if (cancelled) return;
         setStatus(s);
+        if (!s.demoDeveloperExists) {
+          setErrorTitle("The demo account doesn't exist on this backend.");
+          setErrorDetail(
+            "This usually means the boot-time seed never ran. Check the backend logs for [seedIfEmpty] output.",
+          );
+          setHasError(true);
+          return;
+        }
+        if (s.investmentHoldingCount === 0) {
+          setErrorTitle("The demo account has no portfolio data.");
+          setErrorDetail(
+            `The backend is reachable but the demo seed didn't produce any holdings. itemCount=${s.itemCount}, institutionCount=${s.institutionCount}, securityCount=${s.securityCount}.`,
+          );
+          setHasError(true);
+        }
       } catch (err) {
         if (cancelled) return;
         setErrorTitle("Can't reach the backend.");
@@ -75,53 +68,10 @@ export function DemoPage() {
             ? err.message
             : "Fetch to /api/demo/status failed with an unknown error.",
         );
-        setStage("error");
-        return;
+        setHasError(true);
       }
-
-      // Fail fast on an empty demo — don't log the user into nothing.
-      if (!s.demoDeveloperExists) {
-        setErrorTitle("The demo account doesn't exist on this backend.");
-        setErrorDetail(
-          "This usually means the boot-time seed never ran. Check the Koyeb logs for [seedIfEmpty] output.",
-        );
-        setStage("error");
-        return;
-      }
-      if (s.investmentHoldingCount === 0) {
-        setErrorTitle("The demo account has no portfolio data.");
-        setErrorDetail(
-          `The backend is reachable but the demo seed didn't produce any holdings. itemCount=${s.itemCount}, institutionCount=${s.institutionCount}, securityCount=${s.securityCount}. Check Koyeb logs for [demoSeed] output.`,
-        );
-        setStage("error");
-        return;
-      }
-
-      // Phase 2 — mint a fresh demo session for THIS tab. The session
-      // lives in sessionStorage and never touches the shared localStorage
-      // key, so any other tab signed into a real account is unaffected.
-      try {
-        setStage("logging-in");
-        await loginDemo();
-      } catch (err) {
-        if (cancelled) return;
-        setErrorTitle("Demo login failed.");
-        setErrorDetail(
-          err instanceof Error && err.message
-            ? err.message
-            : "POST /api/demo/session failed to mint a demo token.",
-        );
-        setStage("error");
-        return;
-      }
-
-      if (cancelled) return;
-      setStage("ok");
-      navigate("/app", { replace: true });
     })();
-
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -152,7 +102,7 @@ export function DemoPage() {
 
       <main className="relative z-10 flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-[560px] text-center">
-          {stage === "error" ? (
+          {hasError ? (
             <ErrorPanel
               title={errorTitle}
               detail={errorDetail}
@@ -163,17 +113,14 @@ export function DemoPage() {
             <>
               <div className="stripe-chip mb-6 mx-auto">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--stripe-accent)] animate-pulse" />
-                {stage === "checking" ? "Checking demo" : "Signing in"}
+                Loading demo
               </div>
               <h1 className="stripe-display text-[36px] sm:text-[48px] leading-[1.04] tracking-[-0.018em] text-[var(--stripe-ink)]">
-                {stage === "checking"
-                  ? "Reaching the demo server…"
-                  : "Warming up a portfolio for you."}
+                Warming up a portfolio for you.
               </h1>
               <p className="mt-5 text-[15px] leading-[1.6] text-[var(--stripe-ink-muted)]">
-                {stage === "checking"
-                  ? "Waking up the free-tier backend and checking demo data. First visit after an idle period can take up to 20s."
-                  : "Signing you in. The dashboard will load in a moment."}
+                Waking up the free-tier backend and signing you in. First visit
+                after an idle period can take up to 20s.
               </p>
               <div className="mt-8 flex justify-center">
                 <Spinner />
@@ -219,7 +166,6 @@ function ErrorPanel({
         {detail}
       </p>
 
-      {/* Diagnostic card — copyable info for a bug report */}
       <div
         className="rounded-xl border p-4 sm:p-5 mb-6 font-mono text-[12px] leading-[1.6] overflow-auto"
         style={{

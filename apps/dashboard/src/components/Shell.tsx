@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
+import { useBasePath } from "../lib/basePath";
 import { ConnectButton } from "./ConnectButton";
 import { APP_NAME } from "../lib/brand";
 import { BeaconMark } from "./BeaconMark";
@@ -20,15 +21,18 @@ import {
   IconTrend,
 } from "./Icon";
 
-const NAV = [
-  { to: "/app", label: "Overview", Icon: IconDashboard },
-  { to: "/app/holdings", label: "Holdings", Icon: IconLayers },
-  { to: "/app/stocks", label: "Stocks", Icon: IconTrend },
-  { to: "/app/transactions", label: "Transactions", Icon: IconArrows },
-  { to: "/app/dividends", label: "Dividends", Icon: IconCoins },
-  { to: "/app/allocation", label: "Allocation", Icon: IconPie },
-  { to: "/app/accounts", label: "Accounts", Icon: IconBuilding },
-  { to: "/app/settings", label: "Settings", Icon: IconSettings },
+// Sub-paths only — the Shell prefixes them with the current basePath
+// (`/app` or `/demo`) so the nav stays inside whichever space the
+// user is browsing.
+const NAV_ITEMS = [
+  { sub: "", label: "Overview", Icon: IconDashboard },
+  { sub: "holdings", label: "Holdings", Icon: IconLayers },
+  { sub: "stocks", label: "Stocks", Icon: IconTrend },
+  { sub: "transactions", label: "Transactions", Icon: IconArrows },
+  { sub: "dividends", label: "Dividends", Icon: IconCoins },
+  { sub: "allocation", label: "Allocation", Icon: IconPie },
+  { sub: "accounts", label: "Accounts", Icon: IconBuilding },
+  { sub: "settings", label: "Settings", Icon: IconSettings },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -36,6 +40,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { resolvedTheme, toggle } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const basePath = useBasePath();
+  const NAV = NAV_ITEMS.map((n) => ({
+    ...n,
+    to: n.sub ? `${basePath}/${n.sub}` : basePath,
+  }));
 
   // Close the mobile drawer on route change.
   useEffect(() => {
@@ -54,7 +63,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const currentLabel =
     NAV.find((n) => {
-      if (n.to === "/app") return location.pathname === "/app";
+      if (n.to === basePath) return location.pathname === basePath;
       return location.pathname.startsWith(n.to);
     })?.label ?? "Beacon";
 
@@ -143,7 +152,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <NavLink
               key={n.to}
               to={n.to}
-              end={n.to === "/app"}
+              end={n.to === basePath}
               className={({ isActive }) =>
                 clsx(
                   "flex items-center gap-3 mx-2 rounded-lg px-3 py-2.5 text-[13px] transition-colors duration-150 min-h-[44px]",

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { cn } from "../../lib/utils";
@@ -223,10 +223,13 @@ const Shader: React.FC<{ source: string; uniforms: Uniforms }> = ({ source, unif
 
 export const SignInPage = ({ className }: SignInPageProps) => {
   const { pathname } = useLocation();
-  const { login, register, accessToken } = useAuth();
+  const { login, register } = useAuth();
 
-  // If we're already logged in, skip the whole shebang.
-  if (accessToken) return <Navigate to="/app" replace />;
+  // We deliberately do NOT auto-redirect signed-in visitors away from
+  // /login. A user with a leftover demo session in localStorage was
+  // getting bounced into /app and could never see the sign-in form to
+  // log into their real account. The post-success Navigate inside the
+  // submit handler still fires when they actually log in.
 
   // /register defaults to sign-up mode; /login defaults to sign-in.
   const initialMode: "signin" | "signup" = pathname === "/register" ? "signup" : "signin";

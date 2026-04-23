@@ -29,6 +29,7 @@ import {
 } from "./dropdown-menu";
 import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
+import { useBasePath } from "../../lib/basePath";
 import { APP_NAME } from "../../lib/brand";
 
 /**
@@ -65,15 +66,17 @@ const transitionProps = {
   duration: 0.18,
 };
 
-const NAV: Array<{ to: string; label: string; Icon: typeof LayoutDashboard; end?: boolean }> = [
-  { to: "/app", label: "Overview", Icon: LayoutDashboard, end: true },
-  { to: "/app/holdings", label: "Holdings", Icon: Layers },
-  { to: "/app/stocks", label: "Stocks", Icon: LineChart },
-  { to: "/app/transactions", label: "Transactions", Icon: Repeat },
-  { to: "/app/dividends", label: "Dividends", Icon: Coins },
-  { to: "/app/allocation", label: "Allocation", Icon: PieChart },
-  { to: "/app/accounts", label: "Accounts", Icon: Building2 },
-  { to: "/app/settings", label: "Settings", Icon: SettingsIcon },
+// Sub-paths only — see Shell.tsx for the rationale. The component
+// prefixes each `sub` with the active basePath at render time.
+const NAV_ITEMS: Array<{ sub: string; label: string; Icon: typeof LayoutDashboard }> = [
+  { sub: "", label: "Overview", Icon: LayoutDashboard },
+  { sub: "holdings", label: "Holdings", Icon: Layers },
+  { sub: "stocks", label: "Stocks", Icon: LineChart },
+  { sub: "transactions", label: "Transactions", Icon: Repeat },
+  { sub: "dividends", label: "Dividends", Icon: Coins },
+  { sub: "allocation", label: "Allocation", Icon: PieChart },
+  { sub: "accounts", label: "Accounts", Icon: Building2 },
+  { sub: "settings", label: "Settings", Icon: SettingsIcon },
 ];
 
 export const SIDEBAR_COLLAPSED_PX = 49;
@@ -83,6 +86,13 @@ export function SessionNavBar() {
   const { pathname } = useLocation();
   const { developer, logout } = useAuth();
   const { resolvedTheme, toggle } = useTheme();
+  const basePath = useBasePath();
+
+  const NAV = NAV_ITEMS.map((n) => ({
+    ...n,
+    to: n.sub ? `${basePath}/${n.sub}` : basePath,
+    end: !n.sub,
+  }));
 
   function isActive(to: string, end?: boolean) {
     if (end) return pathname === to;
@@ -215,7 +225,7 @@ export function SessionNavBar() {
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link to="/app/settings">
+                <Link to={`${basePath}/settings`}>
                   <UserCircle className="h-4 w-4" /> Settings
                 </Link>
               </DropdownMenuItem>

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../lib/auth";
 import { apiFetch } from "../../lib/api";
+import { useTo } from "../../lib/basePath";
 import { STOCK_WATCHLIST } from "../../lib/stockWatchlist";
 import { useStockMarket, type HistoryRange } from "../../lib/hooks/useStockMarket";
 import { useStockPosition } from "../../lib/hooks/useStockPosition";
@@ -116,6 +117,7 @@ export function StocksPage() {
 }
 
 function NoHoldingsEmptyState() {
+  const to = useTo();
   return (
     <div className="flex flex-col items-center justify-center text-center py-20 px-6">
       <div className="w-12 h-12 rounded-full bg-bg-inset border border-border-subtle flex items-center justify-center mb-4">
@@ -138,12 +140,12 @@ function NoHoldingsEmptyState() {
         Connect a brokerage on the Accounts page or import a CSV to see your
         positions here.
       </p>
-      <a
-        href="/app/accounts"
+      <Link
+        to={to("accounts")}
         className="btn-primary text-xs mt-5 inline-flex items-center gap-1.5"
       >
         Go to Accounts
-      </a>
+      </Link>
     </div>
   );
 }

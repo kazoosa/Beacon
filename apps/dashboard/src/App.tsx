@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 import { Shell } from "./components/Shell";
@@ -15,18 +16,69 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StocksPage } from "./pages/stocks/StocksPage";
 
+/**
+ * Real-account guard. Anything under `/app/*` requires a real
+ * (non-demo) session. A demo user who navigates to `/app/*` is sent
+ * back to the equivalent `/demo/*` so URLs always reflect which
+ * account is being browsed.
+ */
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { accessToken } = useAuth();
+  const { accessToken, isDemo } = useAuth();
+  const { pathname } = useLocation();
   if (!accessToken) return <Navigate to="/login" replace />;
+  if (isDemo) {
+    const sub = pathname.replace(/^\/app/, "");
+    return <Navigate to={`/demo${sub}`} replace />;
+  }
+  return <Shell>{children}</Shell>;
+}
+
+/**
+ * Demo guard. `/demo/*` always shows the shared demo account in this
+ * tab. If the visitor has no session, or has a real session in this
+ * tab, we mint a fresh demo session in sessionStorage (real sessions
+ * in OTHER tabs are unaffected — see lib/auth.tsx).
+ */
+function RequireDemo({ children }: { children: React.ReactNode }) {
+  const { accessToken, isDemo, loginDemo } = useAuth();
+  const startedRef = useRef(false);
+  const needsDemo = !accessToken || !isDemo;
+
+  useEffect(() => {
+    if (!needsDemo) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+    loginDemo().catch((err) => {
+      console.error("demo login failed", err);
+      startedRef.current = false;
+    });
+  }, [needsDemo, loginDemo]);
+
+  if (needsDemo) {
+    // Render the same loading screen the /demo entrypoint uses so the
+    // experience is consistent whether the user clicked "Try the demo"
+    // or pasted /demo/stocks directly.
+    return <DemoPage />;
+  }
   return <Shell>{children}</Shell>;
 }
 
 function RootRoute() {
-  const { accessToken } = useAuth();
-  // If logged in, send to the app. Otherwise show the marketing landing page.
-  if (accessToken) return <Navigate to="/app" replace />;
+  const { accessToken, isDemo } = useAuth();
+  if (accessToken) return <Navigate to={isDemo ? "/demo" : "/app"} replace />;
   return <PreviewLandingPage />;
 }
+
+const APP_ROUTES: Array<{ path: string; element: React.ReactNode }> = [
+  { path: "", element: <OverviewPage /> },
+  { path: "holdings", element: <HoldingsPage /> },
+  { path: "stocks", element: <StocksPage /> },
+  { path: "transactions", element: <TransactionsPage /> },
+  { path: "dividends", element: <DividendsPage /> },
+  { path: "allocation", element: <AllocationPage /> },
+  { path: "accounts", element: <AccountsPage /> },
+  { path: "settings", element: <SettingsPage /> },
+];
 
 export function App() {
   return (
@@ -40,8 +92,6 @@ export function App() {
           <Route path="/landing" element={<PreviewLandingPage />} />
           <Route path="/login" element={<PreviewSignInPage />} />
           <Route path="/register" element={<PreviewSignInPage />} />
-          {/* /demo auto-signs the user in as the seeded demo account */}
-          <Route path="/demo" element={<DemoPage />} />
 
           {/* Legacy preview aliases — keep links in the wild working */}
           <Route path="/preview-landing" element={<Navigate to="/landing" replace />} />
@@ -51,15 +101,24 @@ export function App() {
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
 
-          {/* Authenticated app routes — all under /app */}
-          <Route path="/app" element={<RequireAuth><OverviewPage /></RequireAuth>} />
-          <Route path="/app/holdings" element={<RequireAuth><HoldingsPage /></RequireAuth>} />
-          <Route path="/app/stocks" element={<RequireAuth><StocksPage /></RequireAuth>} />
-          <Route path="/app/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
-          <Route path="/app/dividends" element={<RequireAuth><DividendsPage /></RequireAuth>} />
-          <Route path="/app/allocation" element={<RequireAuth><AllocationPage /></RequireAuth>} />
-          <Route path="/app/accounts" element={<RequireAuth><AccountsPage /></RequireAuth>} />
-          <Route path="/app/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+          {/* Authenticated app routes — real accounts under /app */}
+          {APP_ROUTES.map((r) => (
+            <Route
+              key={`app-${r.path}`}
+              path={r.path ? `/app/${r.path}` : "/app"}
+              element={<RequireAuth>{r.element}</RequireAuth>}
+            />
+          ))}
+
+          {/* Demo routes — same components, mounted under /demo so the
+              URL always tells the user "this is the shared demo". */}
+          {APP_ROUTES.map((r) => (
+            <Route
+              key={`demo-${r.path}`}
+              path={r.path ? `/demo/${r.path}` : "/demo"}
+              element={<RequireDemo>{r.element}</RequireDemo>}
+            />
+          ))}
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
