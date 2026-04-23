@@ -1,8 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth";
-import { apiFetch } from "../api";
 
 export type HistoryRange = "1d" | "5d" | "1mo" | "3mo" | "1y" | "max";
+
+/**
+ * Stock market data (quote/history/news) is served by Vercel
+ * serverless functions at /api/stocks/*, not the Render backend. This
+ * keeps the feature live without requiring a Render redeploy every
+ * time we touch a stock endpoint. No auth header needed — the Yahoo
+ * proxy is public read-only data.
+ */
+async function stocksFetch<T>(path: string): Promise<T> {
+  const res = await fetch(path, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+  }
+  return (await res.json()) as T;
+}
 
 export interface StockQuote {
   symbol: string;
@@ -66,13 +80,12 @@ export interface NewsResponse {
  */
 export function useStockMarket(symbol: string | null, range: HistoryRange = "1mo") {
   const { accessToken } = useAuth();
-  const f = apiFetch(() => accessToken);
   const enabled = Boolean(symbol && accessToken);
   const encoded = symbol ? encodeURIComponent(symbol) : "";
 
   const quote = useQuery({
     queryKey: ["stocks", "quote", symbol],
-    queryFn: () => f<StockQuote>(`/api/stocks/quote/${encoded}`),
+    queryFn: () => stocksFetch<StockQuote>(`/api/stocks/quote/${encoded}`),
     enabled,
     staleTime: 30_000,
     refetchInterval: enabled ? 60_000 : false,
@@ -81,14 +94,14 @@ export function useStockMarket(symbol: string | null, range: HistoryRange = "1mo
   const history = useQuery({
     queryKey: ["stocks", "history", symbol, range],
     queryFn: () =>
-      f<StockHistory>(`/api/stocks/history/${encoded}?range=${range}`),
+      stocksFetch<StockHistory>(`/api/stocks/history/${encoded}?range=${range}`),
     enabled,
     staleTime: 5 * 60_000,
   });
 
   const news = useQuery({
     queryKey: ["stocks", "news", symbol],
-    queryFn: () => f<NewsResponse>(`/api/stocks/news/${encoded}`),
+    queryFn: () => stocksFetch<NewsResponse>(`/api/stocks/news/${encoded}`),
     enabled,
     staleTime: 5 * 60_000,
   });

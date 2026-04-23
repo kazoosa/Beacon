@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../lib/auth";
-import { apiFetch } from "../../lib/api";
 import { MiniSparkline } from "../../components/MiniSparkline";
 import { fmtPct, fmtUsd } from "../../components/money";
 import type {
   StockHistory,
   StockQuote,
 } from "../../lib/hooks/useStockMarket";
+
+async function stocksFetch<T>(path: string): Promise<T> {
+  const res = await fetch(path, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
 
 /** Left rail — search-filterable list of symbols with live price + sparkline. */
 export function StockList({
@@ -77,7 +82,6 @@ function StockListItem({
   onClick: () => void;
 }) {
   const { accessToken } = useAuth();
-  const f = apiFetch(() => accessToken);
   const ref = useRef<HTMLLIElement>(null);
   const [inView, setInView] = useState(() =>
     typeof IntersectionObserver === "undefined",
@@ -111,14 +115,14 @@ function StockListItem({
   const enabled = inView && Boolean(accessToken);
   const quote = useQuery({
     queryKey: ["stocks", "quote", symbol],
-    queryFn: () => f<StockQuote>(`/api/stocks/quote/${encodeURIComponent(symbol)}`),
+    queryFn: () => stocksFetch<StockQuote>(`/api/stocks/quote/${encodeURIComponent(symbol)}`),
     enabled,
     staleTime: 30_000,
   });
   const history = useQuery({
     queryKey: ["stocks", "history", symbol, "1mo"],
     queryFn: () =>
-      f<StockHistory>(`/api/stocks/history/${encodeURIComponent(symbol)}?range=1mo`),
+      stocksFetch<StockHistory>(`/api/stocks/history/${encodeURIComponent(symbol)}?range=1mo`),
     enabled,
     staleTime: 5 * 60_000,
   });
