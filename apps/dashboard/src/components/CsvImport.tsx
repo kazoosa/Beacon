@@ -4,7 +4,14 @@ import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "./money";
 
-type Broker = "fidelity" | "schwab" | "vanguard" | "robinhood";
+type Broker =
+  | "fidelity"
+  | "schwab"
+  | "vanguard"
+  | "robinhood"
+  | "td_ameritrade"
+  | "webull"
+  | "ibkr";
 
 interface ParsedGroup {
   accountName: string;
@@ -22,9 +29,12 @@ interface ParsedGroup {
 interface Preview {
   broker: Broker;
   broker_label: string;
+  kind?: "positions" | "activity";
   groups: ParsedGroup[];
   total_holdings: number;
   total_value: number;
+  total_transactions?: number;
+  transaction_counts?: Record<string, number>;
 }
 
 interface DetectResult {
@@ -47,6 +57,14 @@ export function CsvImport() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [lastImport, setLastImport] = useState<{
+    broker_label: string;
+    accounts: number;
+    holdings: number;
+    transactions: number;
+    dividends: number;
+    kind: "positions" | "activity";
+  } | null>(null);
 
   const brokers = useQuery({
     queryKey: ["csv-brokers"],
@@ -89,13 +107,36 @@ export function CsvImport() {
 
   const importMut = useMutation({
     mutationFn: (args: { broker: Broker; csv: string }) =>
-      f<{ accounts: number; holdings: number }>("/api/csv/import", {
+      f<{
+        broker_label: string;
+        accounts: number;
+        holdings: number;
+        transactions: number;
+        dividends: number;
+        kind: "positions" | "activity";
+      }>("/api/csv/import", {
         method: "POST",
         body: JSON.stringify(args),
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries();
-      reset();
+      setLastImport({
+        broker_label: data.broker_label,
+        accounts: data.accounts ?? 0,
+        holdings: data.holdings ?? 0,
+        transactions: data.transactions ?? 0,
+        dividends: data.dividends ?? 0,
+        kind: data.kind,
+      });
+      // Clear the staging area but keep the success summary visible.
+      setCsv("");
+      setFileName("");
+      setBroker(null);
+      setDetected(null);
+      setOverrideOpen(false);
+      setPreview(null);
+      setErr(null);
+      if (fileRef.current) fileRef.current.value = "";
     },
     onError: (e: Error) => setErr(e.message),
   });
@@ -133,10 +174,53 @@ export function CsvImport() {
         <div>
           <h3 className="text-sm font-semibold text-fg-primary">Import from CSV</h3>
           <p className="text-xs text-fg-muted mt-0.5">
-            Drop in your broker's positions export — we detect the format automatically.
+            Drop in your broker's positions or activity export — we detect the format
+            automatically.
           </p>
         </div>
       </div>
+
+      {lastImport && (
+        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 flex items-start justify-between gap-3">
+          <div className="text-xs text-emerald-300">
+            <div className="font-semibold uppercase tracking-widest text-[10px] mb-0.5">
+              Import complete
+            </div>
+            <div>
+              <span className="text-fg-primary font-medium">{lastImport.broker_label}</span>
+              {" · "}
+              {lastImport.accounts > 0 && (
+                <span>
+                  {lastImport.accounts} account{lastImport.accounts === 1 ? "" : "s"}
+                </span>
+              )}
+              {lastImport.holdings > 0 && (
+                <span> · {lastImport.holdings} holding{lastImport.holdings === 1 ? "" : "s"}</span>
+              )}
+              {lastImport.transactions > 0 && (
+                <span>
+                  {" · "}
+                  {lastImport.transactions} transaction{lastImport.transactions === 1 ? "" : "s"}
+                </span>
+              )}
+              {lastImport.dividends > 0 && (
+                <span>
+                  {" · "}
+                  {lastImport.dividends} dividend{lastImport.dividends === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLastImport(null)}
+            className="text-emerald-300/70 hover:text-emerald-200 text-xs"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {!preview && (
         <>
@@ -174,7 +258,8 @@ export function CsvImport() {
                 </div>
               )}
               <div className="text-[10px] text-fg-muted mt-1">
-                Fidelity, Schwab, Vanguard, or Robinhood export
+                Fidelity, Schwab, Vanguard, Robinhood, TD Ameritrade, Webull,
+                or Interactive Brokers export
               </div>
             </div>
           </div>
@@ -264,7 +349,7 @@ export function CsvImport() {
             <div className="mt-2 space-y-1 pl-2 border-l border-border-subtle">
               <p>
                 <b className="text-fg-secondary">Fidelity:</b> Portfolio → Positions → Download →
-                choose "All accounts"
+                choose "All accounts". Activity: History → Download
               </p>
               <p>
                 <b className="text-fg-secondary">Schwab:</b> Accounts → Positions → Export (CSV)
@@ -275,6 +360,18 @@ export function CsvImport() {
               <p>
                 <b className="text-fg-secondary">Robinhood:</b> no native export; use a 3-column
                 CSV: Symbol, Quantity, Price
+              </p>
+              <p>
+                <b className="text-fg-secondary">TD Ameritrade:</b> My Account → Download → choose
+                "Account Positions" or "Transaction History"
+              </p>
+              <p>
+                <b className="text-fg-secondary">Webull:</b> Account → Statements → Export
+                Positions or Orders CSV
+              </p>
+              <p>
+                <b className="text-fg-secondary">IBKR:</b> Reports → Flex Queries → run a
+                "Portfolio Snapshot" or Activity Statement, save as CSV
               </p>
             </div>
           </details>
@@ -287,8 +384,23 @@ export function CsvImport() {
             <div>
               <div className="text-xs text-fg-muted">Ready to import</div>
               <div className="text-sm font-semibold text-fg-primary mt-0.5">
-                {preview.broker_label} · {preview.total_holdings} holdings ·{" "}
-                <span className="font-num">{fmtUsd(preview.total_value)}</span>
+                {preview.kind === "activity" ? (
+                  <>
+                    {preview.broker_label} · {preview.total_transactions ?? 0} transactions
+                    {preview.transaction_counts && (
+                      <span className="text-fg-muted font-normal ml-2">
+                        ({Object.entries(preview.transaction_counts)
+                          .map(([k, v]) => `${v} ${k}`)
+                          .join(", ")})
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {preview.broker_label} · {preview.total_holdings} holdings ·{" "}
+                    <span className="font-num">{fmtUsd(preview.total_value)}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -352,7 +464,11 @@ export function CsvImport() {
               disabled={!broker || importMut.isPending}
               onClick={() => broker && importMut.mutate({ broker, csv })}
             >
-              {importMut.isPending ? "Importing…" : `Import ${preview.total_holdings} holdings`}
+              {importMut.isPending
+                ? "Importing…"
+                : preview.kind === "activity"
+                ? `Import ${preview.total_transactions ?? 0} transactions`
+                : `Import ${preview.total_holdings} holdings`}
             </button>
             <button className="btn-ghost" onClick={() => setPreview(null)}>
               Back

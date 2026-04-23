@@ -13,6 +13,7 @@ import { prisma } from "../db.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { Errors } from "../utils/errors.js";
+import { classifyActivity } from "./activityClassifier.js";
 
 let clientInstance: Snaptrade | null = null;
 
@@ -225,39 +226,59 @@ export async function syncDeveloper(developer: Developer): Promise<{
       }
 
       // --- Orders / activities ---
+      // SnapTrade's getActivities defaults to a short rolling window when
+      // no dates are passed, which drops most historical dividends and
+      // transactions. Pass an explicit lookback so first-time syncs pull
+      // in the full user history.
+      const years = parseInt(process.env.SNAPTRADE_HISTORY_YEARS ?? "5", 10);
+      const today = new Date();
+      const startDate = new Date(today);
+      startDate.setFullYear(today.getFullYear() - years);
       const actRes = await st.transactionsAndReporting.getActivities({
         userId,
         userSecret,
         accounts: accId,
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: today.toISOString().slice(0, 10),
       });
       const activities = (actRes.data as unknown as Array<Record<string, unknown>>) ?? [];
+      logger.info(
+        { accountId: accId, activityCount: activities.length },
+        "snaptrade activities fetched",
+      );
 
+      let skippedUnknown = 0;
       for (const act of activities) {
-        const orderId = String(act.id ?? "");
-        if (!orderId) continue;
-        const rawType = String(act.type ?? act.action ?? "").toUpperCase();
+        const rawType = String(act.type ?? act.action ?? "").toUpperCase().trim();
         const mapped = mapActivityType(rawType);
-        if (!mapped) continue;
+        if (!mapped) {
+          // Don't silently drop — log the raw label so ops can see what
+          // the classifier is missing and we can extend coverage.
+          skippedUnknown++;
+          if (rawType) logger.warn({ rawType, accountId: accId }, "snaptrade: unrecognised activity type");
+          continue;
+        }
 
-        const symbol = act.symbol as
-          | { symbol?: string | { symbol?: string; description?: string } }
-          | undefined;
-        const ticker =
-          typeof symbol?.symbol === "string"
-            ? symbol.symbol
-            : symbol?.symbol?.symbol ?? "CASH";
-        const description =
-          typeof symbol?.symbol === "string"
-            ? ticker
-            : symbol?.symbol?.description ?? ticker;
-        const price = Number(act.price ?? 0);
+        const { ticker, description } = extractSnapTradeSymbol(act);
+        const price = safeNumber(act.price);
+        const units = safeNumber(act.units);
+        const amount = Math.abs(safeNumber(act.amount, price * units));
+        const fees = Math.abs(safeNumber(act.fee));
+
+        // Prefer trade_date; fall back to settlement_date; last resort
+        // is `new Date()` so we never fail outright (a misdated row is
+        // better than losing the row entirely — operator can reconcile).
+        const date = parseIsoDate(act.trade_date) ?? parseIsoDate(act.settlement_date) ?? new Date();
+        const tradeDateKey = date.toISOString().slice(0, 10);
+
         const security = await upsertSecurity(ticker, description, price);
 
-        const date = act.trade_date
-          ? new Date(String(act.trade_date))
-          : act.settlement_date
-          ? new Date(String(act.settlement_date))
-          : new Date();
+        // Use SnapTrade's id when present; fall back to a deterministic
+        // composite so we never silently drop rows and re-syncs remain
+        // idempotent via the unique snaptradeOrderId constraint.
+        const rawId = String(act.id ?? "").trim();
+        const orderId = rawId
+          || `snaptrade_${accId}_${tradeDateKey}_${mapped}_${ticker}_${amount.toFixed(2)}`;
 
         try {
           await prisma.investmentTransaction.upsert({
@@ -268,19 +289,25 @@ export async function syncDeveloper(developer: Developer): Promise<{
               securityId: security.id,
               snaptradeOrderId: orderId,
               date,
-              name: String(act.description ?? `${mapped} ${ticker}`),
+              name: String(act.description ?? description ?? `${mapped} ${ticker}`),
               type: mapped,
-              quantity: Math.abs(Number(act.units ?? 0)),
+              quantity: Math.abs(units),
               price,
-              amount: Math.abs(Number(act.amount ?? price * Number(act.units ?? 0))),
-              fees: Math.abs(Number(act.fee ?? 0)),
-              isoCurrencyCode: String((act.currency as { code?: string } | undefined)?.code ?? "USD"),
+              amount,
+              fees,
+              isoCurrencyCode: extractCurrency(act.currency) ?? "USD",
             },
           });
           txCount++;
         } catch (err) {
           logger.warn({ err, orderId }, "failed to upsert activity");
         }
+      }
+      if (skippedUnknown > 0) {
+        logger.info(
+          { accountId: accId, skippedUnknown },
+          "snaptrade activities skipped (unrecognised type)",
+        );
       }
     }
   }
@@ -369,30 +396,75 @@ function classifySecurityType(desc?: string): string | null {
 }
 
 function mapActivityType(t: string): string | null {
-  switch (t) {
-    case "BUY":
-    case "PURCHASED":
-      return "buy";
-    case "SELL":
-    case "SOLD":
-      return "sell";
-    case "DIVIDEND":
-    case "DIV":
-      return "dividend";
-    case "INTEREST":
-      return "interest";
-    case "TRANSFER_IN":
-    case "TRANSFER_OUT":
-    case "TRANSFER":
-    case "DEPOSIT":
-    case "WITHDRAWAL":
-      return "transfer";
-    case "FEE":
-    case "TAX":
-      return "fee";
-    default:
-      return null; // skip unknown types (splits, reorg, etc.) — safe to extend later
+  // SPLIT is known and intentionally unsupported — log it so ops can
+  // see the drop; everything else delegates to the shared classifier
+  // used by the CSV importer, keeping the two paths in lockstep.
+  if (t === "SPLIT") {
+    logger.warn("snaptrade SPLIT activity skipped — schema support deferred");
+    return null;
   }
+  return classifyActivity(t);
+}
+
+/**
+ * Pull a ticker + description out of SnapTrade's nested `symbol` field.
+ * SnapTrade ships at least three shapes for this field across their
+ * various activity endpoints:
+ *   1. `symbol: "AAPL"` (bare string on some older responses)
+ *   2. `symbol: { symbol: "AAPL", description: "APPLE INC" }`
+ *   3. `symbol: { symbol: { symbol: "AAPL", description: "APPLE INC" } }`
+ * Plus each level can be null. Return a "CASH" sentinel when the row
+ * is a non-security transaction (dividend on closed position, fee, etc.)
+ * so we never write a null ticker to the DB.
+ */
+function extractSnapTradeSymbol(act: Record<string, unknown>): { ticker: string; description: string } {
+  const raw = act.symbol;
+  if (typeof raw === "string" && raw.trim()) {
+    const t = raw.trim().toUpperCase();
+    return { ticker: t, description: t };
+  }
+  if (raw && typeof raw === "object") {
+    const level1 = raw as { symbol?: unknown; description?: unknown };
+    if (typeof level1.symbol === "string" && level1.symbol.trim()) {
+      const t = level1.symbol.trim().toUpperCase();
+      const d = typeof level1.description === "string" && level1.description ? level1.description : t;
+      return { ticker: t, description: d };
+    }
+    if (level1.symbol && typeof level1.symbol === "object") {
+      const level2 = level1.symbol as { symbol?: unknown; description?: unknown };
+      if (typeof level2.symbol === "string" && level2.symbol.trim()) {
+        const t = level2.symbol.trim().toUpperCase();
+        const d = typeof level2.description === "string" && level2.description ? level2.description : t;
+        return { ticker: t, description: d };
+      }
+    }
+  }
+  return { ticker: "CASH", description: "Cash" };
+}
+
+/** `Number(x)` but tolerant of null, undefined, and non-numeric strings. */
+function safeNumber(v: unknown, fallback = 0): number {
+  if (v === null || v === undefined || v === "") return fallback;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Parse a SnapTrade date string; return null if missing or malformed. */
+function parseIsoDate(v: unknown): Date | null {
+  if (!v) return null;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** SnapTrade currency can be `{ code: "USD" }` or `"USD"` or null. */
+function extractCurrency(v: unknown): string | null {
+  if (!v) return null;
+  if (typeof v === "string" && v.trim()) return v.trim().toUpperCase();
+  if (typeof v === "object") {
+    const code = (v as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim()) return code.trim().toUpperCase();
+  }
+  return null;
 }
 
 function hashColor(name: string): string {

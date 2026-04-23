@@ -394,6 +394,7 @@ type YahooSearchResp = {
     link?: string;
     publisher?: string;
     providerPublishTime?: number;
+    relatedTickers?: string[];
   }>;
 };
 
@@ -423,6 +424,13 @@ export async function fetchNews(symbol: string, limit = 10): Promise<NewsItem[]>
   }
 
   // 2) Yahoo v1 finance search — real headlines, query1 → query2 fallback.
+  //
+  // The search endpoint is keyword-based, so results regularly include
+  // generic market roundups that merely mention the ticker. Yahoo tags
+  // each item with `relatedTickers` naming the primary-mentioned symbols;
+  // filter to those so the stock-detail feed stays on-topic. If the
+  // filter leaves nothing (Yahoo omitted relatedTickers entirely), fall
+  // back to the unfiltered list rather than show an empty panel.
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
     const url =
       `https://${host}/v1/finance/search?q=${encodeURIComponent(symbol)}` +
@@ -430,7 +438,16 @@ export async function fetchNews(symbol: string, limit = 10): Promise<NewsItem[]>
     const json = await resilientJson<YahooSearchResp>(url);
     const news = json?.news ?? [];
     if (news.length === 0) continue;
-    return news.slice(0, limit).map((n, i) => {
+
+    const onTopic = news.filter((n) => (n.relatedTickers ?? []).includes(symbol));
+    const picked = onTopic.length > 0 ? onTopic : news;
+    if (onTopic.length === 0) {
+      console.warn(
+        `[fetchNews] relatedTickers filter returned 0 — falling back to unfiltered (symbol=${symbol})`,
+      );
+    }
+
+    return picked.slice(0, limit).map((n, i) => {
       const publishedAt = n.providerPublishTime
         ? new Date(n.providerPublishTime * 1000).toISOString()
         : new Date().toISOString();

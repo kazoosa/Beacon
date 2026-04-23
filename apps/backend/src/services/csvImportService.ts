@@ -6,13 +6,24 @@
  */
 import { parse as parseCsv } from "csv-parse/sync";
 import type { Developer } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library.js";
 import { prisma } from "../db.js";
 import { nanoid } from "nanoid";
 import { hashSecret, randomToken, sha256Hex } from "../utils/crypto.js";
 import { Errors } from "../utils/errors.js";
 import { logger } from "../logger.js";
+import { classifyActivity, type ActivityType } from "./activityClassifier.js";
 
-export type Broker = "fidelity" | "schwab" | "vanguard" | "robinhood";
+export type Broker =
+  | "fidelity"
+  | "schwab"
+  | "vanguard"
+  | "robinhood"
+  | "td_ameritrade"
+  | "webull"
+  | "ibkr";
+export type CsvKind = "positions" | "activity";
+export type { ActivityType };
 
 interface ParsedPosition {
   ticker: string;
@@ -29,12 +40,29 @@ interface ParsedResult {
   positions: ParsedPosition[];
 }
 
+interface ParsedActivity {
+  accountNumber: string;
+  accountName: string;
+  runDate: Date;
+  action: string;
+  type: ActivityType;
+  ticker: string;
+  description: string;
+  quantity: number;
+  price: number;
+  amount: number;
+  fees: number;
+}
+
 /** Institution ID each broker maps to in our seeded Institutions table. */
 const INSTITUTION_MAP: Record<Broker, string> = {
   fidelity: "ins_10",
   schwab: "ins_9",
   vanguard: "ins_11",
   robinhood: "ins_12",
+  td_ameritrade: "ins_13",
+  webull: "ins_14",
+  ibkr: "ins_15",
 };
 
 /** Human-friendly labels. */
@@ -43,6 +71,9 @@ export const BROKER_LABELS: Record<Broker, string> = {
   schwab: "Charles Schwab",
   vanguard: "Vanguard",
   robinhood: "Robinhood",
+  td_ameritrade: "TD Ameritrade",
+  webull: "Webull",
+  ibkr: "Interactive Brokers",
 };
 
 /* ---------------------------------------------------------------- parsers */
@@ -239,24 +270,358 @@ function getParser(broker: Broker): (csv: string) => ParsedResult[] {
       return parseVanguard;
     case "robinhood":
       return parseRobinhood;
+    case "td_ameritrade":
+      return parseTdAmeritrade;
+    case "webull":
+      return parseWebull;
+    case "ibkr":
+      return parseIbkr;
   }
+}
+
+/**
+ * TD Ameritrade "Account Positions" CSV.
+ * Typical headers: Symbol, Description, Qty, Price, Mkt Value, Avg Cost
+ *  (older Schwab-acquisition era exports use "Quantity" instead of "Qty"
+ *   and may include "Account" in the first lines as metadata).
+ */
+function parseTdAmeritrade(csv: string): ParsedResult[] {
+  const rows = parseCsv(stripBom(csv), {
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+  }) as Record<string, string>[];
+
+  const positions: ParsedPosition[] = [];
+  for (const r of rows) {
+    const ticker = cleanTicker(r["Symbol"] ?? r["SYMBOL"]);
+    if (!ticker || ticker === "TOTAL" || ticker === "CASH") continue;
+    const quantity = cleanNumber(r["Qty"] ?? r["Quantity"] ?? r["Shares"]);
+    if (quantity === 0) continue;
+    const price = cleanNumber(
+      r["Price"] ?? r["Last Price"] ?? r["Mkt Value"] ?? r["Market Value"],
+    );
+    const avg = cleanNumber(r["Avg Cost"] ?? r["Average Cost"] ?? r["Cost"]);
+    positions.push({
+      ticker,
+      name: r["Description"] ?? ticker,
+      quantity,
+      price,
+      avgCost: avg || price,
+    });
+  }
+  if (positions.length === 0) return [];
+  return [{ accountName: "TD Ameritrade", accountMask: null, positions }];
+}
+
+/**
+ * Webull "Positions" CSV.
+ * Typical headers: Name, Symbol, Quantity, Price, Cost Price, Market Value
+ *  (Webull also exports an "Orders" CSV with: Time in Force, Filled,
+ *   Status, etc. — handled by parseWebullActivity below).
+ */
+function parseWebull(csv: string): ParsedResult[] {
+  const rows = parseCsv(stripBom(csv), {
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+  }) as Record<string, string>[];
+
+  const positions: ParsedPosition[] = [];
+  for (const r of rows) {
+    const ticker = cleanTicker(r["Symbol"] ?? r["Ticker"]);
+    if (!ticker) continue;
+    const quantity = cleanNumber(r["Quantity"] ?? r["Qty"]);
+    if (quantity === 0) continue;
+    const price = cleanNumber(r["Price"] ?? r["Last Price"] ?? r["Market Price"]);
+    const cost = cleanNumber(r["Cost Price"] ?? r["Cost"] ?? r["Average Cost"]);
+    positions.push({
+      ticker,
+      name: r["Name"] ?? r["Description"] ?? ticker,
+      quantity,
+      price,
+      avgCost: cost || price,
+    });
+  }
+  if (positions.length === 0) return [];
+  return [{ accountName: "Webull", accountMask: null, positions }];
+}
+
+/**
+ * Interactive Brokers "Activity Statement" / "Portfolio Snapshot" CSV.
+ * IBKR Flex Queries produce CSVs with headers like:
+ *   Symbol, Asset Class, Quantity, MarkPrice, CostBasisPrice, PositionValue
+ * Their full Activity Statement format is multi-section, so we look at
+ * standard portfolio-snapshot rows and ignore lines whose first column
+ * is a section marker (e.g. "Statement", "BOS", "EOS").
+ */
+function parseIbkr(csv: string): ParsedResult[] {
+  // IBKR statements often prepend non-data sections — find the line
+  // whose first column begins with "Symbol" and parse from there.
+  const lines = stripBom(csv).split(/\r?\n/);
+  const startIdx = lines.findIndex((l) => /^"?(?:Symbol|Ticker|Conid)"?,/i.test(l.trim()));
+  const effective = startIdx >= 0 ? lines.slice(startIdx).join("\n") : csv;
+
+  const rows = parseCsv(effective, {
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+  }) as Record<string, string>[];
+
+  const positions: ParsedPosition[] = [];
+  for (const r of rows) {
+    const ticker = cleanTicker(r["Symbol"] ?? r["Ticker"]);
+    if (!ticker || ticker === "TOTAL") continue;
+    // Skip non-equity rows (FX, futures, options) — we don't model them.
+    const assetClass = (r["Asset Class"] ?? r["AssetClass"] ?? "").toUpperCase();
+    if (assetClass && !["STK", "ETF", "FUND", "MF"].some((k) => assetClass.includes(k))) {
+      continue;
+    }
+    const quantity = cleanNumber(r["Quantity"] ?? r["Qty"]);
+    if (quantity === 0) continue;
+    const price = cleanNumber(
+      r["MarkPrice"] ?? r["Mark Price"] ?? r["Price"] ?? r["Last Price"],
+    );
+    const cost = cleanNumber(r["CostBasisPrice"] ?? r["Cost Basis Price"] ?? r["Cost Basis"]);
+    positions.push({
+      ticker,
+      name: r["Description"] ?? r["Listing Exchange"] ?? ticker,
+      quantity,
+      price,
+      avgCost: cost || price,
+    });
+  }
+  if (positions.length === 0) return [];
+  return [{ accountName: "Interactive Brokers", accountMask: null, positions }];
+}
+
+/* -------------------------------------------------------- activity parser */
+
+/**
+ * Parse a Fidelity "Accounts_History" / "Activity" CSV. Header fingerprint
+ * is picked up separately by {@link detectCsvKind}; this function assumes
+ * the caller has already confirmed the shape.
+ *
+ * Typical headers: Run Date, Account Name, Account Number, Action, Symbol,
+ * Description, Security Type, Quantity, Price, Commission, Fees, Amount,
+ * Settlement Date.
+ */
+function parseFidelityActivity(csv: string): ParsedActivity[] {
+  const rows = parseCsv(csv, {
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+  }) as Record<string, string>[];
+
+  const out: ParsedActivity[] = [];
+  for (const r of rows) {
+    const action = (r["Action"] ?? "").trim();
+    if (!action) continue;
+
+    const type = classifyActivity(action);
+    if (!type) {
+      logger.warn({ action }, "csv activity: unrecognised action, skipping row");
+      continue;
+    }
+
+    const runDateRaw = (r["Run Date"] ?? r["Trade Date"] ?? "").trim();
+    if (!runDateRaw) continue;
+    const runDate = parseFidelityDate(runDateRaw);
+    if (!runDate) continue;
+
+    const accountNumber = (r["Account Number"] ?? r["Account"] ?? "").trim();
+    const accountName = (r["Account Name"] ?? "Fidelity").trim();
+    const ticker = cleanTicker(r["Symbol"]) || "CASH";
+    const description = (r["Description"] ?? r["Security Description"] ?? ticker).trim();
+    const commission = cleanNumber(r["Commission"]);
+    const feesCol = cleanNumber(r["Fees"]);
+
+    out.push({
+      accountNumber,
+      accountName,
+      runDate,
+      action,
+      type,
+      ticker,
+      description,
+      quantity: Math.abs(cleanNumber(r["Quantity"])),
+      price: cleanNumber(r["Price"]),
+      amount: Math.abs(cleanNumber(r["Amount"])),
+      fees: commission + feesCol,
+    });
+  }
+  return out;
+}
+
+/** Fidelity's Run Date column is `MM/DD/YYYY`. */
+function parseFidelityDate(raw: string): Date | null {
+  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) {
+    const fallback = new Date(raw);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+  const [, mm, dd, yyyy] = m;
+  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Tolerant date parser used by the generic activity importer. Accepts
+ * `MM/DD/YYYY`, `YYYY-MM-DD`, ISO timestamps, and the `MM/DD/YYYY HH:MM:SS`
+ * shape that TD/Webull use. Returns null when nothing parses cleanly so
+ * callers can skip the row instead of writing garbage timestamps.
+ */
+function parseFlexibleDate(raw: string | undefined | null): Date | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  // MM/DD/YYYY (with optional HH:MM[:SS])
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (us) {
+    const [, mm, dd, yyyy] = us;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const fallback = new Date(s);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/**
+ * Generic activity/transaction CSV parser used by every broker except
+ * Fidelity (which has its own dedicated parser above). Accepts a wide
+ * set of common column aliases — date/symbol/ticker/quantity/price/
+ * amount/action — so most exports parse without per-broker code.
+ *
+ * The classifier in {@link classifyActivity} decides whether each row
+ * is a buy/sell/dividend/etc. Rows whose action doesn't classify are
+ * logged and skipped (never thrown), matching the Fidelity behaviour.
+ */
+function parseGenericActivity(broker: Broker, csv: string): ParsedActivity[] {
+  const rows = parseCsv(stripBom(csv), {
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+  }) as Record<string, string>[];
+
+  const out: ParsedActivity[] = [];
+  for (const r of rows) {
+    const action = (
+      r["Action"] ??
+      r["Activity"] ??
+      r["Transaction Type"] ??
+      r["Type"] ??
+      r["Side"] ??
+      ""
+    ).trim();
+    if (!action) continue;
+
+    const type = classifyActivity(action);
+    if (!type) {
+      logger.warn({ action, broker }, "csv activity: unrecognised action, skipping row");
+      continue;
+    }
+
+    const dateRaw =
+      r["Date"] ??
+      r["Run Date"] ??
+      r["Trade Date"] ??
+      r["Settlement Date"] ??
+      r["Filled Time"] ??
+      r["Time"] ??
+      "";
+    const runDate = parseFlexibleDate(dateRaw);
+    if (!runDate) continue;
+
+    const accountNumber = (r["Account Number"] ?? r["Account"] ?? "").trim();
+    const accountName = (r["Account Name"] ?? BROKER_LABELS[broker]).trim();
+    const ticker = cleanTicker(r["Symbol"] ?? r["Ticker"] ?? r["Instrument"]) || "CASH";
+    const description = (
+      r["Description"] ??
+      r["Security Description"] ??
+      r["Name"] ??
+      ticker
+    ).trim();
+    const commission = cleanNumber(r["Commission"] ?? r["Commission/Fees"]);
+    const feesCol = cleanNumber(r["Fees"] ?? r["Reg Fee"] ?? r["SEC Fee"]);
+
+    out.push({
+      accountNumber,
+      accountName,
+      runDate,
+      action,
+      type,
+      ticker,
+      description,
+      quantity: Math.abs(cleanNumber(r["Quantity"] ?? r["Filled"] ?? r["Shares"] ?? r["Qty"])),
+      price: cleanNumber(r["Price"] ?? r["Avg Price"] ?? r["Avg Fill Price"]),
+      amount: Math.abs(cleanNumber(r["Amount"] ?? r["Net Amount"] ?? r["Total"])),
+      fees: commission + feesCol,
+    });
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------- public API */
 
 /**
- * Parse a CSV without touching the DB — used by the frontend preview step.
+ * Parse a positions CSV without touching the DB — used by the frontend
+ * preview step for holdings imports.
  */
 export function previewCsv(broker: Broker, csv: string): ParsedResult[] {
   const parser = getParser(broker);
   try {
-    return parser(csv);
+    return parser(stripBom(csv));
   } catch (err) {
     logger.warn({ err, broker }, "CSV parse failed");
     throw Errors.badRequest(
       `Couldn't parse that CSV. Make sure you're uploading the standard ${BROKER_LABELS[broker]} positions export.`,
     );
   }
+}
+
+/**
+ * Parse an activity CSV for preview. Fidelity uses its dedicated parser
+ * (which knows about the multi-section file shape); every other broker
+ * routes through the column-alias-driven generic parser.
+ */
+export function previewActivityCsv(broker: Broker, csv: string): ParsedActivity[] {
+  try {
+    if (broker === "fidelity") return parseFidelityActivity(stripBom(csv));
+    return parseGenericActivity(broker, csv);
+  } catch (err) {
+    logger.warn({ err, broker }, "CSV activity parse failed");
+    throw Errors.badRequest(
+      `Couldn't parse that activity CSV. Check the columns include date, symbol, action, quantity, price, and amount.`,
+    );
+  }
+}
+
+/**
+ * Strip a UTF-8 BOM prefix if the browser/editor added one. Excel in
+ * particular writes CSVs with `\uFEFF` at the start, which breaks both
+ * substring matching on the first column name and CSV parsers that
+ * don't auto-strip it.
+ */
+function stripBom(s: string): string {
+  return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+}
+
+/**
+ * Normalise a header row for fingerprint matching: strip BOM, trim,
+ * lower-case, collapse runs of whitespace, and strip surrounding
+ * quotes on each column. Makes `has("account number")` robust against
+ * `"Account  Number"`, `"ACCOUNT NUMBER"`, `Account Number,,,` etc.
+ */
+function normaliseHeader(header: string): string {
+  return stripBom(header)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -267,14 +632,38 @@ export function previewCsv(broker: Broker, csv: string): ParsedResult[] {
  * `null` when the CSV doesn't match any known format; callers
  * should fall back to a manual picker.
  *
- * The checks are intentionally narrow — we'd rather return null and
- * ask than misclassify a CSV and dump it into the wrong parser.
+ * Recognises BOTH positions/holdings exports and activity/transaction
+ * exports for the same broker — the CSV kind is distinguished
+ * separately by {@link detectCsvKind}.
  */
 export function detectBroker(csv: string): Broker | null {
-  const firstLine = csv.split(/\r?\n/).find((l) => l.trim().length > 0);
+  const raw = stripBom(csv);
+  const firstLine = raw.split(/\r?\n/).find((l) => l.trim().length > 0);
   if (!firstLine) return null;
-  const header = firstLine.toLowerCase();
+  const header = normaliseHeader(firstLine);
   const has = (needle: string) => header.includes(needle.toLowerCase());
+
+  // IBKR's Activity Statement and Portfolio Snapshot share a unique
+  // "MarkPrice" / "CostBasisPrice" pair seen nowhere else.
+  if ((has("markprice") || has("mark price")) && has("symbol")) return "ibkr";
+  if (has("costbasisprice") || has("cost basis price")) return "ibkr";
+  if (has("conid")) return "ibkr"; // IBKR's contract ID column
+
+  // Webull's positions header includes "Cost Price" (not "Cost Basis"
+  // like other brokers) and a "Name" column that other brokers call
+  // "Description".
+  if (has("cost price") && (has("symbol") || has("ticker"))) return "webull";
+
+  // TD Ameritrade uses "Qty" (rare) and "Mkt Value" (very rare). The
+  // older positions export also has "Avg Cost".
+  if ((has("qty") || has("quantity")) && (has("mkt value") || has("avg cost"))) {
+    return "td_ameritrade";
+  }
+
+  // Fidelity activity export — "Run Date" + "Action" is a strong
+  // fingerprint and must be checked before the Schwab branch (which
+  // also matches on "Security Type").
+  if (has("run date") && has("action")) return "fidelity";
 
   // Fidelity's Portfolio_Positions export
   if (has("account number") && has("cost basis total")) return "fidelity";
@@ -294,23 +683,39 @@ export function detectBroker(csv: string): Broker | null {
   // Robinhood doesn't export positions natively, so the docs tell
   // users to build a minimal 3-column CSV. Detect that narrow
   // shape: header is exactly "symbol,quantity,price" (any order).
-  const cols = header.split(",").map((c) => c.trim());
-  if (
-    cols.length === 3 &&
-    cols.includes("symbol") &&
-    cols.includes("quantity") &&
-    cols.includes("price")
-  ) {
-    return "robinhood";
+  // Accept "ticker" as an alias for symbol and "shares" for quantity.
+  const cols = header
+    .split(",")
+    .map((c) => c.replace(/^["'\s]+|["'\s]+$/g, ""));
+  if (cols.length === 3) {
+    const hasSymbol = cols.some((c) => c === "symbol" || c === "ticker");
+    const hasQty = cols.some((c) => c === "quantity" || c === "shares");
+    const hasPrice = cols.some((c) => c === "price");
+    if (hasSymbol && hasQty && hasPrice) return "robinhood";
   }
 
   return null;
 }
 
 /**
- * Import a CSV into the DB. Creates a new Item per broker (reusing an
- * existing one if a CSV import for that broker is already present for this
- * user) and replaces its holdings to match the uploaded file.
+ * Detect whether the CSV is a positions/holdings export or an activity
+ * (transaction history) export. Currently recognises Fidelity's activity
+ * shape by the presence of both "Run Date" and "Action" columns; returns
+ * "positions" for everything else that looks CSV-shaped, and null when the
+ * CSV is empty or malformed.
+ */
+export function detectCsvKind(csv: string): CsvKind | null {
+  const firstLine = stripBom(csv).split(/\r?\n/).find((l) => l.trim().length > 0);
+  if (!firstLine) return null;
+  const header = normaliseHeader(firstLine);
+  if (header.includes("run date") && header.includes("action")) return "activity";
+  return "positions";
+}
+
+/**
+ * Import a CSV into the DB. Accepts either a positions export (holdings)
+ * or an activity export (transactions + dividends); the CSV kind is
+ * auto-detected and routed accordingly.
  *
  * Wrapped in try/catch that logs the full stack via logger.error and
  * rethrows as a readable badRequest. Without this, any unexpected
@@ -321,7 +726,14 @@ export async function importCsv(
   developer: Developer,
   broker: Broker,
   csv: string,
-): Promise<{ itemId: string; accounts: number; holdings: number }> {
+): Promise<{
+  itemId: string;
+  accounts: number;
+  holdings: number;
+  transactions: number;
+  dividends: number;
+  kind: CsvKind;
+}> {
   try {
     return await importCsvInner(developer, broker, csv);
   } catch (err) {
@@ -329,15 +741,27 @@ export async function importCsv(
       { err, developerId: developer.id, broker },
       "importCsv failed",
     );
+    // Prisma unique-constraint violations have a P2002 code — turn them
+    // into a readable 400 instead of a generic 500. Any other Prisma or
+    // unknown error falls through so the global error handler surfaces
+    // the real bug (500 "Internal server error") rather than hiding it
+    // behind a fake 400.
+    if (err instanceof PrismaClientKnownRequestError) {
+      if (err.code === "P2002") {
+        const target = Array.isArray(err.meta?.target)
+          ? (err.meta!.target as string[]).join(", ")
+          : String(err.meta?.target ?? "");
+        throw Errors.badRequest(
+          `Your CSV has duplicate rows for ${target || "a row"} — combine lots into one row and retry.`,
+        );
+      }
+      throw err;
+    }
     if (err instanceof Error) {
-      // Re-throw as a 400 so the frontend shows the real reason.
-      // ApiError thrown inside importCsvInner (via Errors.badRequest)
-      // already has a status; pass it through unchanged.
       const status = (err as { status?: number }).status;
       if (status && status >= 400 && status < 500) throw err;
-      throw Errors.badRequest(err.message || "CSV import failed");
     }
-    throw Errors.badRequest("CSV import failed");
+    throw err;
   }
 }
 
@@ -345,14 +769,20 @@ async function importCsvInner(
   developer: Developer,
   broker: Broker,
   csv: string,
-): Promise<{ itemId: string; accounts: number; holdings: number }> {
-  const parsed = previewCsv(broker, csv);
-  if (parsed.length === 0) {
-    throw Errors.badRequest("No holdings found in that file.");
-  }
+): Promise<{
+  itemId: string;
+  accounts: number;
+  holdings: number;
+  transactions: number;
+  dividends: number;
+  kind: CsvKind;
+}> {
+  csv = stripBom(csv);
+  const kind = detectCsvKind(csv) ?? "positions";
 
+  // Shared setup — institution, application, and item rows. These are
+  // idempotent and safe to run outside the write transaction.
   const institutionId = INSTITUTION_MAP[broker];
-  // Ensure institution exists (Vanguard may be missing in older seeds)
   await prisma.institution.upsert({
     where: { id: institutionId },
     update: {},
@@ -367,7 +797,6 @@ async function importCsvInner(
 
   const application = await ensureInternalApplication(developer);
 
-  // One Item per broker per user (CSV-sourced items are keyed by institution)
   const itemClientUserId = `csv_${developer.id}`;
   let item = await prisma.item.findFirst({
     where: {
@@ -389,61 +818,217 @@ async function importCsvInner(
     });
   }
 
-  let accountsTouched = 0;
-  let holdingsCreated = 0;
+  if (kind === "activity") {
+    return importActivityCsv(developer, broker, csv, item.id);
+  }
+  return importPositionsCsv(developer, broker, csv, item.id);
+}
 
-  // Wipe old accounts + holdings for this item so re-import is idempotent
-  const existingAccounts = await prisma.account.findMany({
-    where: { itemId: item.id },
-    select: { id: true },
-  });
-  if (existingAccounts.length > 0) {
-    const accIds = existingAccounts.map((a) => a.id);
-    await prisma.investmentHolding.deleteMany({ where: { accountId: { in: accIds } } });
-    await prisma.investmentTransaction.deleteMany({ where: { accountId: { in: accIds } } });
-    await prisma.account.deleteMany({ where: { id: { in: accIds } } });
+async function importPositionsCsv(
+  developer: Developer,
+  broker: Broker,
+  csv: string,
+  itemId: string,
+) {
+  const parsed = previewCsv(broker, csv);
+  if (parsed.length === 0) {
+    throw Errors.badRequest("No holdings found in that file.");
   }
 
-  for (const group of parsed) {
-    const account = await prisma.account.create({
-      data: {
-        itemId: item.id,
-        name: group.accountName,
-        officialName: BROKER_LABELS[broker],
-        mask: group.accountMask ?? "0000",
-        type: "investment",
-        subtype: "brokerage",
-        currentBalance: group.positions.reduce((s, p) => s + p.quantity * p.price, 0),
-        availableBalance: group.positions.reduce((s, p) => s + p.quantity * p.price, 0),
-        isoCurrencyCode: "USD",
-      },
+  // Wrap wipe + recreate in a single transaction so a partial failure
+  // rolls everything back instead of leaving orphan accounts.
+  // Default Prisma timeout is 5 s — large positions CSVs with hundreds
+  // of holdings blow through that, and when the transaction times out
+  // the writes ARE rolled back but the thrown error falls through to
+  // the global 500 handler. Bumping the timeout to 30 s covers the
+  // common case; anything larger should be chunked.
+  const result = await prisma.$transaction(async (tx) => {
+    const existingAccounts = await tx.account.findMany({
+      where: { itemId },
+      select: { id: true },
     });
-    accountsTouched++;
+    if (existingAccounts.length > 0) {
+      const accIds = existingAccounts.map((a) => a.id);
+      await tx.investmentHolding.deleteMany({ where: { accountId: { in: accIds } } });
+      await tx.investmentTransaction.deleteMany({ where: { accountId: { in: accIds } } });
+      await tx.account.deleteMany({ where: { id: { in: accIds } } });
+    }
 
-    for (const pos of group.positions) {
-      const security = await upsertSecurity(pos);
-      await prisma.investmentHolding.create({
+    let accountsTouched = 0;
+    let holdingsCreated = 0;
+    for (const group of parsed) {
+      const account = await tx.account.create({
         data: {
-          accountId: account.id,
-          securityId: security.id,
-          quantity: pos.quantity,
-          institutionPrice: pos.price,
-          institutionPriceAsOf: new Date(),
-          institutionValue: pos.quantity * pos.price,
-          costBasis: (pos.avgCost ?? pos.price) * pos.quantity,
+          itemId,
+          name: group.accountName,
+          officialName: BROKER_LABELS[broker],
+          mask: group.accountMask ?? "0000",
+          type: "investment",
+          subtype: "brokerage",
+          currentBalance: group.positions.reduce((s, p) => s + p.quantity * p.price, 0),
+          availableBalance: group.positions.reduce((s, p) => s + p.quantity * p.price, 0),
           isoCurrencyCode: "USD",
         },
       });
-      holdingsCreated++;
+      accountsTouched++;
+
+      for (const pos of group.positions) {
+        const security = await upsertSecurityWithTx(tx, pos);
+        await tx.investmentHolding.create({
+          data: {
+            accountId: account.id,
+            securityId: security.id,
+            quantity: pos.quantity,
+            institutionPrice: pos.price,
+            institutionPriceAsOf: new Date(),
+            institutionValue: pos.quantity * pos.price,
+            costBasis: (pos.avgCost ?? pos.price) * pos.quantity,
+            isoCurrencyCode: "USD",
+          },
+        });
+        holdingsCreated++;
+      }
     }
-  }
+    return { accountsTouched, holdingsCreated };
+  }, { timeout: 30_000, maxWait: 10_000 });
 
   logger.info(
-    { developerId: developer.id, broker, accountsTouched, holdingsCreated },
+    {
+      developerId: developer.id,
+      broker,
+      kind: "positions",
+      accountsTouched: result.accountsTouched,
+      holdingsCreated: result.holdingsCreated,
+    },
     "CSV import complete",
   );
 
-  return { itemId: item.id, accounts: accountsTouched, holdings: holdingsCreated };
+  return {
+    itemId,
+    accounts: result.accountsTouched,
+    holdings: result.holdingsCreated,
+    transactions: 0,
+    dividends: 0,
+    kind: "positions" as const,
+  };
+}
+
+async function importActivityCsv(
+  developer: Developer,
+  broker: Broker,
+  csv: string,
+  itemId: string,
+) {
+  const activities =
+    broker === "fidelity"
+      ? parseFidelityActivity(csv)
+      : parseGenericActivity(broker, csv);
+  if (activities.length === 0) {
+    throw Errors.badRequest("No recognised transactions found in that file.");
+  }
+
+  // Group activities by accountNumber so we attach them to one Account
+  // row per brokerage account referenced in the file.
+  const byAccount = new Map<string, ParsedActivity[]>();
+  for (const act of activities) {
+    const key = act.accountNumber || act.accountName || "default";
+    const bucket = byAccount.get(key);
+    if (bucket) bucket.push(act);
+    else byAccount.set(key, [act]);
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    let accountsTouched = 0;
+    let transactionsUpserted = 0;
+    let dividendsUpserted = 0;
+
+    for (const [, bucket] of byAccount) {
+      const first = bucket[0]!;
+      const mask = (first.accountNumber || "").slice(-4) || "0000";
+
+      // Find an existing CSV-sourced account with the same mask under
+      // this item, else create one. Activity imports attach to prior
+      // positions accounts when possible so holdings + transactions
+      // share the same Account row.
+      let account = await tx.account.findFirst({
+        where: { itemId, mask },
+      });
+      if (!account) {
+        account = await tx.account.create({
+          data: {
+            itemId,
+            name: first.accountName || "Fidelity Account",
+            officialName: BROKER_LABELS[broker],
+            mask,
+            type: "investment",
+            subtype: "brokerage",
+            currentBalance: 0,
+            availableBalance: 0,
+            isoCurrencyCode: "USD",
+          },
+        });
+        accountsTouched++;
+      }
+
+      for (let i = 0; i < bucket.length; i++) {
+        const act = bucket[i]!;
+        const security = await upsertSecurityWithTx(tx, {
+          ticker: act.ticker,
+          name: act.description,
+          quantity: 0,
+          price: act.price,
+        });
+
+        const runDateKey = act.runDate.toISOString().slice(0, 10);
+        const actionKey = act.action.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 40);
+        const externalId =
+          `csv_${developer.id}_${broker}_${runDateKey}_${actionKey}_${act.ticker}_${act.amount.toFixed(2)}_${i}`;
+
+        await tx.investmentTransaction.upsert({
+          where: { snaptradeOrderId: externalId },
+          update: {},
+          create: {
+            accountId: account.id,
+            securityId: security.id,
+            snaptradeOrderId: externalId,
+            date: act.runDate,
+            name: act.description || `${act.type} ${act.ticker}`,
+            type: act.type,
+            quantity: act.quantity,
+            price: act.price,
+            amount: act.amount,
+            fees: act.fees,
+            isoCurrencyCode: "USD",
+          },
+        });
+        if (act.type === "dividend") dividendsUpserted++;
+        else transactionsUpserted++;
+      }
+    }
+
+    return { accountsTouched, transactionsUpserted, dividendsUpserted };
+  }, { timeout: 30_000, maxWait: 10_000 });
+
+  logger.info(
+    {
+      developerId: developer.id,
+      broker,
+      kind: "activity",
+      accountsTouched: result.accountsTouched,
+      transactionsUpserted: result.transactionsUpserted,
+      dividendsUpserted: result.dividendsUpserted,
+    },
+    "CSV import complete",
+  );
+
+  return {
+    itemId,
+    accounts: result.accountsTouched,
+    holdings: 0,
+    transactions: result.transactionsUpserted,
+    dividends: result.dividendsUpserted,
+    kind: "activity" as const,
+  };
 }
 
 /* --------------------------------------------------------------- internals */
@@ -464,9 +1049,18 @@ async function ensureInternalApplication(developer: Developer) {
   });
 }
 
+type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 async function upsertSecurity(pos: ParsedPosition) {
+  return upsertSecurityWithTx(prisma, pos);
+}
+
+async function upsertSecurityWithTx(
+  tx: PrismaTx | typeof prisma,
+  pos: ParsedPosition,
+) {
   const normalizedType = classifyType(pos.type);
-  return prisma.security.upsert({
+  return tx.security.upsert({
     where: { tickerSymbol: pos.ticker },
     update: {
       name: pos.name,
@@ -506,5 +1100,11 @@ function brokerColor(b: Broker): string {
       return "#960000";
     case "robinhood":
       return "#c0ff00";
+    case "td_ameritrade":
+      return "#76b82a";
+    case "webull":
+      return "#1668e3";
+    case "ibkr":
+      return "#d81222";
   }
 }
