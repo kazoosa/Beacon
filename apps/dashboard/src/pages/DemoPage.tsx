@@ -36,7 +36,7 @@ interface DemoStatus {
 }
 
 export function DemoPage() {
-  const { accessToken, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>("checking");
   const [status, setStatus] = useState<DemoStatus | null>(null);
@@ -94,22 +94,25 @@ export function DemoPage() {
         return;
       }
 
-      // Phase 2 — sign in (unless we're already signed in).
-      if (!accessToken) {
-        try {
-          setStage("logging-in");
-          await login(DEMO_EMAIL, DEMO_PASSWORD);
-        } catch (err) {
-          if (cancelled) return;
-          setErrorTitle("Demo login failed.");
-          setErrorDetail(
-            err instanceof Error && err.message
-              ? err.message
-              : "POST /api/auth/login rejected the demo credentials.",
-          );
-          setStage("error");
-          return;
-        }
+      // Phase 2 — always sign in. We deliberately ignore any pre-existing
+      // session: if the demo developer was re-created on the backend (e.g.
+      // after a `prisma db push --accept-data-loss`) the existing JWT
+      // references a developer ID that no longer exists, and the dashboard
+      // silently renders an empty portfolio. A fresh login guarantees the
+      // token matches the current demo developer.
+      try {
+        setStage("logging-in");
+        await login(DEMO_EMAIL, DEMO_PASSWORD);
+      } catch (err) {
+        if (cancelled) return;
+        setErrorTitle("Demo login failed.");
+        setErrorDetail(
+          err instanceof Error && err.message
+            ? err.message
+            : "POST /api/auth/login rejected the demo credentials.",
+        );
+        setStage("error");
+        return;
       }
 
       if (cancelled) return;
