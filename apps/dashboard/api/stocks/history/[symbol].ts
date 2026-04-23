@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   fetchHistory,
+  getLastError,
   isValidSymbol,
   normalizeSymbol,
   setCors,
@@ -29,6 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const history = await fetchHistory(symbol, range);
+    if (history.isFallback) {
+      res.setHeader(
+        "X-Yahoo-Debug",
+        (getLastError() ?? "null").replace(/[\r\n\t]+/g, " ").slice(0, 400),
+      );
+    }
     return res.status(200).json(history);
   } catch (err) {
     console.error("[api/stocks/history] failed:", err);
