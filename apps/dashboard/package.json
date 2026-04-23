@@ -27,7 +27,8 @@
     "recharts": "^2.12.7",
     "snaptrade-react": "^3.0.0",
     "tailwind-merge": "^2.5.4",
-    "three": "^0.170.0"
+    "three": "^0.170.0",
+    "yahoo-finance2": "2.11.3"
   },
   "devDependencies": {
     "@types/prismjs": "^1.26.4",

@@ -1,36 +1,17 @@
 /**
- * Minimal Yahoo Finance helpers for the Vercel serverless proxy.
+ * Yahoo Finance helpers backed by the `yahoo-finance2` library.
  *
- * yahoo-finance2 pulls in cookies + crumb tokens which are finicky
- * inside Vercel cold starts. These helpers hit Yahoo's JSON endpoints
- * directly with a realistic User-Agent — works for quote, history,
- * and news without any auth plumbing.
+ * The previous pass hit Yahoo's JSON endpoints directly and ran into
+ * Yahoo's newer "429 Too Many Requests" for unauthenticated callers —
+ * they now require a cookie + crumb token handshake before every
+ * `query1/query2` call. `yahoo-finance2` handles that dance
+ * internally, pooling a cached cookie across invocations.
  *
- * All functions return the shape the frontend expects. Errors are
- * caught and returned as `null` / `[]` so the caller can decide
- * whether to 404 or return a DB-fallback payload.
+ * Pinned exact at 2.11.3 (see package.json) because the upstream has
+ * a history of rotating the handshake when Yahoo breaks it on their
+ * side.
  */
-
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-  "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
-
-async function yfetch<T>(url: string): Promise<T | null> {
-  try {
-    const r = await fetch(url, {
-      headers: {
-        "User-Agent": UA,
-        Accept: "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      // Vercel default fetch, no extra options
-    });
-    if (!r.ok) return null;
-    return (await r.json()) as T;
-  } catch {
-    return null;
-  }
-}
+import yahooFinance from "yahoo-finance2";
 
 export function normalizeSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/\.(?=[A-Z]$)/, "-");
@@ -63,91 +44,68 @@ export interface StockQuote {
   asOf: string;
 }
 
-export async function fetchQuote(symbol: string): Promise<StockQuote | null> {
-  // quoteSummary returns everything in one hit
-  const url =
-    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
-    `?modules=price,summaryDetail,assetProfile,defaultKeyStatistics`;
-  type Resp = {
-    quoteSummary?: {
-      result?: Array<{
-        price?: {
-          regularMarketPrice?: { raw?: number };
-          regularMarketPreviousClose?: { raw?: number };
-          regularMarketChange?: { raw?: number };
-          regularMarketChangePercent?: { raw?: number };
-          longName?: string;
-          shortName?: string;
-          symbol?: string;
-          exchangeName?: string;
-          currency?: string;
-          marketCap?: { raw?: number };
-          regularMarketVolume?: { raw?: number };
-        };
-        summaryDetail?: {
-          dividendYield?: { raw?: number };
-          beta?: { raw?: number };
-          fiftyTwoWeekHigh?: { raw?: number };
-          fiftyTwoWeekLow?: { raw?: number };
-          averageDailyVolume3Month?: { raw?: number };
-          trailingPE?: { raw?: number };
-        };
-        assetProfile?: {
-          sector?: string;
-          website?: string;
-        };
-      }>;
-    };
-  };
-  const json = await yfetch<Resp>(url);
-  const result = json?.quoteSummary?.result?.[0];
-  if (!result?.price) return null;
-
-  const price = result.price.regularMarketPrice?.raw ?? 0;
-  const prev = result.price.regularMarketPreviousClose?.raw ?? price;
-  const change = result.price.regularMarketChange?.raw ?? price - prev;
-  const changePct =
-    result.price.regularMarketChangePercent?.raw !== undefined
-      ? (result.price.regularMarketChangePercent.raw ?? 0) * 100
-      : prev
-      ? ((price - prev) / prev) * 100
-      : 0;
-
-  const logoUrl = makeLogoUrl(result.assetProfile?.website);
-
-  return {
-    symbol: result.price.symbol ?? symbol,
-    name: result.price.longName ?? result.price.shortName ?? symbol,
-    exchange: result.price.exchangeName ?? null,
-    currency: result.price.currency ?? "USD",
-    price,
-    previousClose: prev,
-    change,
-    changePct,
-    marketCap: result.price.marketCap?.raw ?? null,
-    peRatio: result.summaryDetail?.trailingPE?.raw ?? null,
-    fiftyTwoWeekHigh: result.summaryDetail?.fiftyTwoWeekHigh?.raw ?? null,
-    fiftyTwoWeekLow: result.summaryDetail?.fiftyTwoWeekLow?.raw ?? null,
-    volume: result.price.regularMarketVolume?.raw ?? null,
-    avgVolume: result.summaryDetail?.averageDailyVolume3Month?.raw ?? null,
-    dividendYieldPct:
-      result.summaryDetail?.dividendYield?.raw !== undefined
-        ? (result.summaryDetail.dividendYield.raw ?? 0) * 100
-        : null,
-    beta: result.summaryDetail?.beta?.raw ?? null,
-    sector: result.assetProfile?.sector ?? null,
-    logoUrl,
-    isFallback: false,
-    asOf: new Date().toISOString(),
-  };
-}
-
-function makeLogoUrl(website?: string): string | null {
+function makeLogoUrl(website?: string | null): string | null {
   if (!website) return null;
   try {
     const url = new URL(website.startsWith("http") ? website : `https://${website}`);
     return `https://logo.clearbit.com/${url.hostname.replace(/^www\./, "")}`;
   } catch {
+    return null;
+  }
+}
+
+export async function fetchQuote(symbol: string): Promise<StockQuote | null> {
+  try {
+    const [q, summary] = await Promise.all([
+      yahooFinance.quote(symbol),
+      yahooFinance
+        .quoteSummary(symbol, {
+          modules: ["summaryDetail", "assetProfile", "defaultKeyStatistics"],
+        })
+        .catch(() => null),
+    ]);
+    if (!q) return null;
+
+    const price = (q.regularMarketPrice ?? q.postMarketPrice ?? q.preMarketPrice ?? 0) as number;
+    const prev = (q.regularMarketPreviousClose ?? price) as number;
+    const change = price - prev;
+    const changePct = prev ? (change / prev) * 100 : 0;
+
+    type Profile = { sector?: string; website?: string; longBusinessSummary?: string };
+    type Detail = {
+      dividendYield?: number;
+      beta?: number;
+      fiftyTwoWeekHigh?: number;
+      fiftyTwoWeekLow?: number;
+    };
+    const profile = summary?.assetProfile as Profile | undefined;
+    const details = summary?.summaryDetail as Detail | undefined;
+
+    return {
+      symbol,
+      name: (q.longName ?? q.shortName ?? symbol) as string,
+      exchange: (q.fullExchangeName ?? q.exchange ?? null) as string | null,
+      currency: (q.currency ?? "USD") as string,
+      price,
+      previousClose: prev,
+      change,
+      changePct,
+      marketCap: (q.marketCap ?? null) as number | null,
+      peRatio: (q.trailingPE ?? null) as number | null,
+      fiftyTwoWeekHigh: (q.fiftyTwoWeekHigh ?? details?.fiftyTwoWeekHigh ?? null) as number | null,
+      fiftyTwoWeekLow: (q.fiftyTwoWeekLow ?? details?.fiftyTwoWeekLow ?? null) as number | null,
+      volume: (q.regularMarketVolume ?? null) as number | null,
+      avgVolume: (q.averageDailyVolume3Month ?? null) as number | null,
+      dividendYieldPct:
+        details?.dividendYield !== undefined ? details.dividendYield * 100 : null,
+      beta: details?.beta ?? null,
+      sector: profile?.sector ?? null,
+      logoUrl: makeLogoUrl(profile?.website),
+      isFallback: false,
+      asOf: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error("[yahoo.fetchQuote]", symbol, err);
     return null;
   }
 }
@@ -170,14 +128,20 @@ export interface StockHistory {
   isFallback: boolean;
 }
 
-function rangeToParams(range: HistoryRange): { interval: string; range: string } {
+function rangeToChartArgs(
+  range: HistoryRange,
+): { period1: Date; interval:
+    | "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "90m" | "1h"
+    | "1d" | "5d" | "1wk" | "1mo" | "3mo" } {
+  const now = new Date();
+  const d = (days: number) => new Date(now.getTime() - days * 86_400_000);
   switch (range) {
-    case "1d":  return { interval: "5m",  range: "1d"  };
-    case "5d":  return { interval: "15m", range: "5d"  };
-    case "1mo": return { interval: "1d",  range: "1mo" };
-    case "3mo": return { interval: "1d",  range: "3mo" };
-    case "1y":  return { interval: "1d",  range: "1y"  };
-    case "max": return { interval: "1wk", range: "max" };
+    case "1d":  return { period1: d(1),                     interval: "5m"  };
+    case "5d":  return { period1: d(5),                     interval: "15m" };
+    case "1mo": return { period1: d(31),                    interval: "1d"  };
+    case "3mo": return { period1: d(93),                    interval: "1d"  };
+    case "1y":  return { period1: d(366),                   interval: "1d"  };
+    case "max": return { period1: new Date(1990, 0, 1),     interval: "1wk" };
   }
 }
 
@@ -185,47 +149,44 @@ export async function fetchHistory(
   symbol: string,
   range: HistoryRange,
 ): Promise<StockHistory> {
-  const { interval, range: r } = rangeToParams(range);
-  const url =
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
-    `?interval=${interval}&range=${r}&includePrePost=false`;
-  type Resp = {
-    chart?: {
-      result?: Array<{
-        timestamp?: number[];
-        indicators?: {
-          quote?: Array<{
-            open?: Array<number | null>;
-            high?: Array<number | null>;
-            low?: Array<number | null>;
-            close?: Array<number | null>;
-            volume?: Array<number | null>;
-          }>;
-        };
+  try {
+    const { period1, interval } = rangeToChartArgs(range);
+    type ChartResult = {
+      quotes?: Array<{
+        date?: Date | string;
+        open?: number | null;
+        high?: number | null;
+        low?: number | null;
+        close?: number | null;
+        volume?: number | null;
       }>;
     };
-  };
-  const json = await yfetch<Resp>(url);
-  const result = json?.chart?.result?.[0];
-  const ts = result?.timestamp ?? [];
-  const q = result?.indicators?.quote?.[0];
-  if (!q || ts.length === 0) {
+    const result = (await yahooFinance.chart(symbol, {
+      period1,
+      interval,
+      includePrePost: false,
+    } as unknown as Parameters<typeof yahooFinance.chart>[1])) as unknown as ChartResult;
+    const quotes = Array.isArray(result?.quotes) ? result.quotes : [];
+    const candles: StockCandle[] = quotes
+      .filter((q) => q && q.date && q.close !== null && q.close !== undefined)
+      .map((q) => ({
+        time: new Date(q.date as Date).toISOString(),
+        open: q.open ?? null,
+        high: q.high ?? null,
+        low: q.low ?? null,
+        close: q.close ?? null,
+        volume: q.volume ?? null,
+      }));
+    return {
+      symbol,
+      range,
+      candles,
+      isFallback: candles.length === 0,
+    };
+  } catch (err) {
+    console.error("[yahoo.fetchHistory]", symbol, range, err);
     return { symbol, range, candles: [], isFallback: true };
   }
-  const candles: StockCandle[] = ts.map((t, i) => ({
-    time: new Date(t * 1000).toISOString(),
-    open: q.open?.[i] ?? null,
-    high: q.high?.[i] ?? null,
-    low: q.low?.[i] ?? null,
-    close: q.close?.[i] ?? null,
-    volume: q.volume?.[i] ?? null,
-  }));
-  return {
-    symbol,
-    range,
-    candles: candles.filter((c) => c.close !== null),
-    isFallback: false,
-  };
 }
 
 export interface NewsItem {
@@ -238,33 +199,40 @@ export interface NewsItem {
 }
 
 export async function fetchNews(symbol: string, limit = 10): Promise<NewsItem[]> {
-  const url =
-    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}` +
-    `&quotesCount=0&newsCount=${limit}`;
-  type Resp = {
-    news?: Array<{
+  try {
+    type Raw = {
       uuid?: string;
       title?: string;
       link?: string;
       publisher?: string;
-      providerPublishTime?: number;
-    }>;
-  };
-  const json = await yfetch<Resp>(url);
-  const items = json?.news ?? [];
-  return items.slice(0, limit).map((n, i) => {
-    const publishedAt = n.providerPublishTime
-      ? new Date(n.providerPublishTime * 1000).toISOString()
-      : new Date().toISOString();
-    return {
-      id: n.uuid ?? `${symbol}-${i}`,
-      source: (n.publisher ?? "YAHOO").toUpperCase(),
-      title: n.title ?? "",
-      url: n.link ?? "",
-      publishedAt,
-      relativeTime: relativeTimeFrom(publishedAt),
+      providerPublishTime?: number | Date;
     };
-  });
+    const result = (await yahooFinance.search(symbol, {
+      newsCount: limit,
+      quotesCount: 0,
+    })) as unknown as { news?: Raw[] };
+    const items = Array.isArray(result?.news) ? result.news : [];
+    return items.slice(0, limit).map((n, i) => {
+      const publishedAt = n.providerPublishTime
+        ? new Date(
+            typeof n.providerPublishTime === "number"
+              ? n.providerPublishTime * 1000
+              : n.providerPublishTime,
+          ).toISOString()
+        : new Date().toISOString();
+      return {
+        id: n.uuid ?? `${symbol}-${i}`,
+        source: (n.publisher ?? "").toUpperCase() || "YAHOO",
+        title: n.title ?? "",
+        url: n.link ?? "",
+        publishedAt,
+        relativeTime: relativeTimeFrom(publishedAt),
+      };
+    });
+  } catch (err) {
+    console.error("[yahoo.fetchNews]", symbol, err);
+    return [];
+  }
 }
 
 function relativeTimeFrom(iso: string): string {
@@ -283,7 +251,6 @@ function relativeTimeFrom(iso: string): string {
   return `${Math.floor(days / 365)}y`;
 }
 
-/** CORS helper — set on every serverless response. */
 export function setCors(headers: Record<string, string> = {}): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
