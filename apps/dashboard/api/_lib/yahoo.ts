@@ -1,17 +1,22 @@
 /**
- * Live market data via Stooq.
+ * Live market data.
  *
- * We originally tried to proxy yahoo-finance2 from Vercel, but Yahoo's
- * quote endpoints rate-limit Vercel's datacenter IPs aggressively
- * even with a valid cookie+crumb handshake — known problem for any
- * cloud-hosted scraper. Stooq ships free, auth-less CSV endpoints
- * that are happy to serve from datacenters, which is all we need for
- * quote + OHLCV history. No news feed on Stooq, so that endpoint
- * returns an empty list (the UI already handles that gracefully).
+ * Layered source strategy, best-first:
+ *   1. Finnhub (real-time, 60/min free) — when FINNHUB_API_KEY is set
+ *      in the Vercel project env. Real market data with sub-second
+ *      latency.
+ *   2. Stooq — free, no-auth CSV. ~15 minutes delayed but works from
+ *      any IP.
  *
- * File is still called `yahoo.ts` to minimize the blast radius on the
- * serverless handlers that import it.
+ * History sits outside this chain: Finnhub's candles moved to paid
+ * tier, so we still try Yahoo's v8/finance/chart endpoint directly
+ * (different rate-limit characteristics than quote endpoints) and
+ * accept an empty response if that 429s.
+ *
+ * File is still called `yahoo.ts` to minimize the blast radius on
+ * the serverless handlers that import it.
  */
+import { fetchFinnhubQuote, fetchFinnhubNews, hasFinnhubKey } from "./finnhub.js";
 
 export function normalizeSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/\.(?=[A-Z]$)/, "-");
@@ -86,7 +91,40 @@ function parseCsv(text: string): string[][] {
 }
 
 export async function fetchQuote(symbol: string): Promise<StockQuote | null> {
-  // Light quote endpoint — just the last trade.
+  // 1) Finnhub first (real-time) when the env key is present.
+  if (hasFinnhubKey()) {
+    const fh = await fetchFinnhubQuote(symbol);
+    if (fh) {
+      const { quote: q, profile: p } = fh;
+      return {
+        symbol,
+        name: p?.name ?? symbol,
+        exchange: p?.exchange ?? null,
+        currency: p?.currency ?? "USD",
+        price: q.c,
+        previousClose: q.pc,
+        change: q.d,
+        changePct: q.dp,
+        marketCap: p?.marketCapitalization
+          ? p.marketCapitalization * 1_000_000 // Finnhub returns in millions
+          : null,
+        peRatio: null,
+        fiftyTwoWeekHigh: null,
+        fiftyTwoWeekLow: null,
+        volume: null,
+        avgVolume: null,
+        dividendYieldPct: null,
+        beta: null,
+        sector: p?.finnhubIndustry ?? null,
+        logoUrl: p?.logo ?? null,
+        isFallback: false,
+        asOf: q.t ? new Date(q.t * 1000).toISOString() : new Date().toISOString(),
+      };
+    }
+    lastError = "finnhub quote: empty, falling back to stooq";
+  }
+
+  // 2) Stooq — delayed but free, no key.
   // Fields: Symbol, Date, Time, Open, High, Low, Close, Volume, Name
   const url = `https://stooq.com/q/l/?s=${stooqSymbol(symbol)}&f=sd2t2ohlcvn&h&e=csv`;
   const csv = await stooqFetch(url);
@@ -101,8 +139,6 @@ export async function fetchQuote(symbol: string): Promise<StockQuote | null> {
     header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
   const name = data[idx("name")] ?? symbol;
   const open = parseFloat(data[idx("open")]);
-  const high = parseFloat(data[idx("high")]);
-  const low = parseFloat(data[idx("low")]);
   const close = parseFloat(data[idx("close")]);
   const volume = parseInt(data[idx("volume")], 10);
 
@@ -113,14 +149,10 @@ export async function fetchQuote(symbol: string): Promise<StockQuote | null> {
 
   // Stooq's single-row endpoint doesn't carry previous-close directly.
   // Use open as a cheap proxy for intraday change so the UI has a
-  // non-zero delta to render; the 52w high/low / market cap / sector /
-  // etc. fields are left null and the UI degrades gracefully.
+  // non-zero delta to render.
   const prev = Number.isFinite(open) && open > 0 ? open : close;
   const change = close - prev;
   const changePct = prev ? (change / prev) * 100 : 0;
-
-  void high;
-  void low;
 
   return {
     symbol,
@@ -256,17 +288,51 @@ export interface NewsItem {
 }
 
 /**
- * News is intentionally not fetched — Stooq doesn't serve news, and
- * the free Yahoo news endpoint is 429'd from Vercel. The UI handles
- * empty arrays gracefully with an empty-state message.
+ * News via Finnhub /company-news when a key is configured, otherwise
+ * empty. The UI renders an honest "Live news feed coming soon"
+ * message on empty arrays.
  */
 export async function fetchNews(
   symbol: string,
-  _limit = 10,
+  limit = 10,
 ): Promise<NewsItem[]> {
-  void symbol;
-  void _limit;
-  return [];
+  if (!hasFinnhubKey()) return [];
+  const raw = await fetchFinnhubNews(symbol);
+  if (!raw) return [];
+  // Most recent first (Finnhub returns newest-first already, but be safe).
+  return raw
+    .slice()
+    .sort((a, b) => (b.datetime ?? 0) - (a.datetime ?? 0))
+    .slice(0, limit)
+    .map((n, i) => {
+      const publishedAt = n.datetime
+        ? new Date(n.datetime * 1000).toISOString()
+        : new Date().toISOString();
+      return {
+        id: n.id ? String(n.id) : `${symbol}-${i}`,
+        source: (n.source ?? "").toUpperCase() || "FINNHUB",
+        title: n.headline ?? "",
+        url: n.url ?? "",
+        publishedAt,
+        relativeTime: relativeTimeFrom(publishedAt),
+      };
+    });
+}
+
+function relativeTimeFrom(iso: string): string {
+  const secs = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  const wks = Math.floor(days / 7);
+  if (wks < 5) return `${wks}w`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  return `${Math.floor(days / 365)}y`;
 }
 
 export function setCors(headers: Record<string, string> = {}): Record<string, string> {

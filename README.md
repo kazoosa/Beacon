@@ -15,6 +15,14 @@ with 20+ brokers via SnapTrade, CSV fallback for anything else.
 
 **Debugging the demo.** If the demo is ever empty or won't load, `GET https://<backend>/api/demo/status` is a public no-auth endpoint that reports whether the demo developer exists, how many items / holdings it has, and how many institutions / securities are seeded. The `/demo` page also surfaces the same data in a diagnostic panel when it can't open the session.
 
+**Upgrading the Stocks page data feed.** Live quotes on `/app/stocks` default to [Stooq](https://stooq.com) (free, no key, ~15-minute delayed). To get real-time quotes and real company news instead:
+
+1. Sign up at [finnhub.io](https://finnhub.io) — the free tier is 60 calls/min, no card required.
+2. In the Vercel dashboard project → **Settings → Environment Variables** → add `FINNHUB_API_KEY` with the token from your Finnhub account.
+3. Redeploy (Vercel → Deployments → latest → ⋯ → Redeploy).
+
+The `/api/stocks/quote/:symbol` and `/api/stocks/news/:symbol` serverless functions detect the key at runtime and switch to Finnhub automatically. If the key is missing or invalid, they fall back to Stooq for quotes and an empty-state for news — nothing else changes.
+
 ---
 
 ## What's new
