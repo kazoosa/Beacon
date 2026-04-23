@@ -17,6 +17,7 @@ import {
 import { fmtPct, fmtUsd } from "../../components/money";
 import { MiniSparkline } from "../../components/MiniSparkline";
 import { useChartTheme, tooltipProps } from "../../lib/chartTheme";
+import { logoUrlFor } from "../../lib/stockDomains";
 import type {
   HistoryRange,
   NewsResponse,
@@ -94,7 +95,10 @@ function StockHeader({
 
   return (
     <div className="card p-4 md:p-5 flex items-center gap-4 flex-wrap">
-      <InitialsOrLogo symbol={symbol} logoUrl={q?.logoUrl ?? null} />
+      <InitialsOrLogo
+        symbol={symbol}
+        logoUrl={q?.logoUrl ?? logoUrlFor(symbol)}
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           <h1 className="text-lg font-semibold text-fg-primary truncate">
@@ -869,7 +873,12 @@ function HeadlinesPanel({ news }: { news: UseQueryResult<NewsResponse> }) {
       ) : news.isError ? (
         <EmptyState message="Headlines unavailable right now." />
       ) : items.length === 0 ? (
-        <EmptyState message="No recent headlines." />
+        <div className="text-center text-xs text-fg-muted py-6 rounded border border-dashed border-border-subtle">
+          <div className="mb-1">Live news feed coming soon.</div>
+          <div className="text-[10px] text-fg-fainter">
+            Quotes stream live; headlines need a separate provider.
+          </div>
+        </div>
       ) : (
         <ul className="space-y-3 max-h-80 overflow-y-auto -mr-1 pr-1">
           {items.slice(0, 10).map((n) => (
@@ -935,16 +944,22 @@ function DividendCalendar({
                 {q.status}
               </span>
             </div>
-            <div className={`text-base font-num font-semibold ${q.totalPaid > 0 ? "pos" : "text-fg-muted"}`}>
-              {q.totalPaid > 0 ? fmtUsd(q.totalPaid, { showSign: true }) : "~"}
+            <div className={`text-base font-num font-semibold ${q.totalPaid > 0 ? "pos" : "text-fg-fainter"}`}>
+              {q.totalPaid > 0 ? fmtUsd(q.totalPaid, { showSign: true }) : "—"}
             </div>
-            <div className="text-[10px] text-fg-muted font-num mt-1">
-              ex-date: {q.exDate ? new Date(q.exDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
-              <br />
-              pays: {q.payDate ? new Date(q.payDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
-              <br />
-              yield: {q.yieldPct !== null ? `${q.yieldPct.toFixed(2)}%` : "—"}
-            </div>
+            {q.totalPaid > 0 ? (
+              <div className="text-[10px] text-fg-muted font-num mt-1">
+                ex-date: {q.exDate ? new Date(q.exDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                <br />
+                pays: {q.payDate ? new Date(q.payDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                <br />
+                yield: {q.yieldPct !== null ? `${q.yieldPct.toFixed(2)}%` : "—"}
+              </div>
+            ) : (
+              <div className="text-[10px] text-fg-fainter mt-1">
+                No dividend this quarter
+              </div>
+            )}
           </div>
         ))}
       </div>
