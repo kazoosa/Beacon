@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
 import { CsvImport } from "../components/CsvImport";
+import { ConnectButton } from "../components/ConnectButton";
 
 const DEMO_EMAIL = "demo@finlink.dev";
 
@@ -116,6 +117,22 @@ export function AccountsPage() {
         </div>
       </div>
 
+      {/* Primary CTA — Connect a brokerage. Always visible, not just
+          buried in the empty state. */}
+      <div className="card p-4 md:p-5 flex items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-fg-primary">
+            Connect a Brokerage
+          </div>
+          <div className="text-xs text-fg-muted mt-0.5">
+            Auto-sync via SnapTrade, or import a CSV below.
+          </div>
+        </div>
+        <div className="w-full sm:w-auto sm:min-w-[220px]">
+          <ConnectButton />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[...groups.entries()].map(([itemId, g]) => {
           const total = g.accounts.reduce((s, a) => s + a.current_balance, 0);
@@ -172,7 +189,8 @@ export function AccountsPage() {
         })}
         {groups.size === 0 && (
           <div className="md:col-span-2 card p-10 text-center text-fg-secondary text-sm">
-            No brokerages connected. Use "+ Connect brokerage" in the sidebar — or import a CSV below.
+            No brokerages connected yet. Use the "Connect a Brokerage" button
+            above — or import a CSV below.
           </div>
         )}
       </div>

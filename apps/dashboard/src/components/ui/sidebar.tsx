@@ -11,6 +11,7 @@ import {
   LogOut,
   Moon,
   PieChart,
+  Plus,
   Repeat,
   Settings as SettingsIcon,
   Sun,
@@ -31,6 +32,7 @@ import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { useBasePath } from "../../lib/basePath";
 import { APP_NAME } from "../../lib/brand";
+import { BeaconMark } from "../BeaconMark";
 
 /**
  * Collapsible sidebar — sits at 49px wide by default and expands to 240px
@@ -120,11 +122,18 @@ export function SessionNavBar() {
       aria-label="Primary navigation"
     >
       <div className="flex h-full flex-col">
-        {/* Header */}
+        {/* Header — uses the favicon.svg as the brand mark so the
+            sidebar logo always matches what the browser tab shows. */}
         <div className="h-14 shrink-0 flex items-center gap-2 px-2.5 border-b border-border-subtle">
-          <div className="w-8 h-8 rounded-md bg-fg-primary text-bg-base flex items-center justify-center text-[11px] font-bold shrink-0">
-            {APP_NAME.slice(0, 1).toUpperCase()}
-          </div>
+          <Link
+            to={basePath}
+            className="flex items-center justify-center w-8 h-8 shrink-0 text-fg-primary rounded-md hover:bg-bg-hover transition-colors"
+            aria-label={`${APP_NAME} home`}
+          >
+            {/* Same SVG geometry as /public/favicon.svg, but rendered as a
+                React component so currentColor flips with light/dark mode. */}
+            <BeaconMark size={22} />
+          </Link>
           <motion.span
             variants={labelVariants}
             className="text-sm font-semibold text-fg-primary truncate"
@@ -166,8 +175,21 @@ export function SessionNavBar() {
 
         <Separator />
 
-        {/* Footer — theme toggle + account */}
+        {/* Footer — Connect brokerage CTA + theme toggle + account */}
         <div className="p-2 flex flex-col gap-1">
+          <Link
+            to={`${basePath}/accounts`}
+            title="Connect a brokerage"
+            className="flex h-9 items-center rounded-md px-2 gap-2 bg-fg-primary text-bg-base hover:bg-fg-primary/90 transition-colors font-medium"
+          >
+            <Plus className="h-4 w-4 shrink-0" />
+            <motion.span
+              variants={labelVariants}
+              className="text-sm whitespace-nowrap overflow-hidden"
+            >
+              Connect brokerage
+            </motion.span>
+          </Link>
           <button
             type="button"
             onClick={toggle}

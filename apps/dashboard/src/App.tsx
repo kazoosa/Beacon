@@ -66,7 +66,10 @@ function RequireDemo({ children }: { children: React.ReactNode }) {
 function RootRoute() {
   const { accessToken, isDemo } = useAuth();
   if (accessToken) return <Navigate to={isDemo ? "/demo" : "/app"} replace />;
-  return <PreviewLandingPage />;
+  // First-time visitors hit / but the landing page lives at /landing —
+  // redirect so the URL bar reflects "you're on the marketing site",
+  // matching the rest of the site's URL hygiene.
+  return <Navigate to="/landing" replace />;
 }
 
 const APP_ROUTES: Array<{ path: string; element: React.ReactNode }> = [

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
+import { useTo } from "../lib/basePath";
 
 interface Tx {
   id: string;
@@ -24,6 +25,7 @@ const TYPES = ["all", "buy", "sell", "dividend", "interest", "transfer", "fee"] 
 export function TransactionsPage() {
   const { accessToken } = useAuth();
   const f = apiFetch(() => accessToken);
+  const to = useTo();
   const [type, setType] = useState<(typeof TYPES)[number]>("all");
   const [ticker, setTicker] = useState("");
   const [inst, setInst] = useState<string>("all");
@@ -113,6 +115,24 @@ export function TransactionsPage() {
         </div>
       </div>
 
+      {q.isError && (
+        <div className="card p-6 text-center">
+          <div className="text-sm text-rose-400">
+            Couldn't load your transactions.
+          </div>
+          <div className="text-xs text-fg-muted mt-1">
+            {(q.error as Error)?.message ?? "The transactions endpoint returned an error."}
+          </div>
+          <button
+            type="button"
+            className="btn-ghost text-xs mt-3"
+            onClick={() => q.refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       <div className="card overflow-hidden">
         <table className="table">
           <thead>
@@ -136,7 +156,7 @@ export function TransactionsPage() {
                 <td>
                   {t.ticker_symbol ? (
                     <Link
-                      to={`/app/stocks?symbol=${encodeURIComponent(t.ticker_symbol)}`}
+                      to={`${to("stocks")}?symbol=${encodeURIComponent(t.ticker_symbol)}`}
                       className="font-num text-fg-primary text-sm hover:underline underline-offset-2 decoration-fg-muted"
                       title={`Open ${t.ticker_symbol} details`}
                     >
@@ -174,10 +194,27 @@ export function TransactionsPage() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && (
+            {rows.length === 0 && !q.isLoading && !q.isError && (
               <tr>
                 <td colSpan={7} className="text-center text-fg-muted py-10">
-                  No transactions match your filters.
+                  {(q.data?.transactions.length ?? 0) === 0 ? (
+                    <>
+                      No transactions yet.{" "}
+                      <Link to={to("accounts")} className="text-fg-primary hover:underline">
+                        Connect a brokerage
+                      </Link>{" "}
+                      or import a CSV.
+                    </>
+                  ) : (
+                    "No transactions match your filters."
+                  )}
+                </td>
+              </tr>
+            )}
+            {q.isLoading && (
+              <tr>
+                <td colSpan={7} className="text-center text-fg-muted py-10">
+                  Loading transactions…
                 </td>
               </tr>
             )}

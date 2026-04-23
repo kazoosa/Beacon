@@ -105,6 +105,17 @@ export function CsvImport() {
     onError: (e: Error) => setErr(e.message),
   });
 
+  function clearStagingArea() {
+    setCsv("");
+    setFileName("");
+    setBroker(null);
+    setDetected(null);
+    setOverrideOpen(false);
+    setPreview(null);
+    setErr(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   const importMut = useMutation({
     mutationFn: (args: { broker: Broker; csv: string }) =>
       f<{
@@ -128,28 +139,31 @@ export function CsvImport() {
         dividends: data.dividends ?? 0,
         kind: data.kind,
       });
-      // Clear the staging area but keep the success summary visible.
-      setCsv("");
-      setFileName("");
-      setBroker(null);
-      setDetected(null);
-      setOverrideOpen(false);
-      setPreview(null);
-      setErr(null);
-      if (fileRef.current) fileRef.current.value = "";
+      clearStagingArea();
     },
-    onError: (e: Error) => setErr(e.message),
+    onError: (e: Error) => {
+      // Always invalidate caches — a 5xx may still have committed (e.g.
+      // the import succeeded but a downstream side-effect threw). The
+      // user gets a friendlier message in that case so they don't think
+      // their data is lost.
+      qc.invalidateQueries();
+      // Clear the preview / file so the user isn't left staring at
+      // stale rows with no obvious way forward. The error message and
+      // the persistent dropzone make "try again" obvious.
+      clearStagingArea();
+      const status = (e as { status?: number }).status;
+      if (status && status >= 500) {
+        setErr(
+          "The server hiccupped, but your data may have been saved. Refresh the page or check the Holdings tab — your import may already be there.",
+        );
+      } else {
+        setErr(e.message);
+      }
+    },
   });
 
   function reset() {
-    setCsv("");
-    setFileName("");
-    setBroker(null);
-    setDetected(null);
-    setOverrideOpen(false);
-    setPreview(null);
-    setErr(null);
-    if (fileRef.current) fileRef.current.value = "";
+    clearStagingArea();
   }
 
   async function ingestFile(file: File) {
@@ -325,7 +339,28 @@ export function CsvImport() {
             </div>
           )}
 
-          {err && <div className="text-xs text-rose-500 dark:text-rose-400">{err}</div>}
+          {err && (
+            <div className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 flex items-start justify-between gap-3">
+              <div className="text-xs text-rose-300">{err}</div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="text-[11px] text-rose-200 hover:text-rose-100 underline-offset-2 hover:underline"
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setErr(null)}
+                  className="text-rose-300/70 hover:text-rose-100 text-xs"
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <button
@@ -456,7 +491,28 @@ export function CsvImport() {
             </div>
           ))}
 
-          {err && <div className="text-xs text-rose-500 dark:text-rose-400">{err}</div>}
+          {err && (
+            <div className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 flex items-start justify-between gap-3">
+              <div className="text-xs text-rose-300">{err}</div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="text-[11px] text-rose-200 hover:text-rose-100 underline-offset-2 hover:underline"
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setErr(null)}
+                  className="text-rose-300/70 hover:text-rose-100 text-xs"
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 pt-2">
             <button

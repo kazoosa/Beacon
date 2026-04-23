@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
 import { useChartTheme, tooltipProps } from "../lib/chartTheme";
+import { useTo } from "../lib/basePath";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 interface DividendsResp {
@@ -16,13 +18,42 @@ export function DividendsPage() {
   const { accessToken } = useAuth();
   const f = apiFetch(() => accessToken);
   const ct = useChartTheme();
+  const to = useTo();
   const q = useQuery({
     queryKey: ["dividends"],
     queryFn: () => f<DividendsResp>("/api/portfolio/dividends"),
   });
 
   if (q.isLoading) {
-    return <div className="text-sm text-fg-muted">Loading…</div>;
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold text-fg-primary">Dividends</h1>
+        <div className="card p-10 text-center text-sm text-fg-muted">
+          Loading…
+        </div>
+      </div>
+    );
+  }
+
+  if (q.isError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold text-fg-primary">Dividends</h1>
+        <div className="card p-10 text-center">
+          <h2 className="text-rose-400 mb-2">Couldn't load dividends</h2>
+          <p className="text-sm text-fg-muted max-w-md mx-auto">
+            {(q.error as Error)?.message ?? "The dividends endpoint returned an error."}
+          </p>
+          <button
+            type="button"
+            className="btn-ghost text-xs mt-3"
+            onClick={() => q.refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!q.data || (q.data.lifetime_total === 0 && q.data.by_ticker.length === 0)) {
@@ -31,9 +62,12 @@ export function DividendsPage() {
         <h1 className="text-xl font-semibold text-fg-primary">Dividends</h1>
         <div className="card p-10 text-center">
           <h2 className="text-fg-primary mb-2">No dividend income yet</h2>
-          <p className="text-sm text-fg-secondary max-w-md mx-auto">
+          <p className="text-sm text-fg-secondary max-w-md mx-auto mb-5">
             Once your connected brokerages pay out dividends or interest, you'll see them here with monthly breakdowns and top payers.
           </p>
+          <Link to={to("accounts")} className="btn-primary text-xs inline-flex">
+            Connect a brokerage
+          </Link>
         </div>
       </div>
     );
