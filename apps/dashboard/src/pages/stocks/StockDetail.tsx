@@ -251,7 +251,7 @@ function HistoryChart({
         {history.isLoading ? (
           <Skeleton className="h-full" />
         ) : data.length === 0 ? (
-          <EmptyState message="Price history unavailable right now." />
+          <EmptyState message="Price history temporarily unavailable — live quote above is current." />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>

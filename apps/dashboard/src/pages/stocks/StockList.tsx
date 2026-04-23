@@ -127,13 +127,19 @@ function StockListItem({
     staleTime: 5 * 60_000,
   });
 
-  const sparkData = useMemo(
-    () =>
-      (history.data?.candles ?? [])
-        .map((c) => c.close)
-        .filter((v): v is number => v !== null && v !== undefined),
-    [history.data],
-  );
+  const sparkData = useMemo(() => {
+    const closes = (history.data?.candles ?? [])
+      .map((c) => c.close)
+      .filter((v): v is number => v !== null && v !== undefined);
+    if (closes.length >= 2) return closes;
+    // Fall back to a two-point line (prev -> current) when history is
+    // blocked upstream, so the row still carries a visual delta hint
+    // instead of an empty box.
+    if (quote.data) {
+      return [quote.data.previousClose || quote.data.price, quote.data.price];
+    }
+    return [];
+  }, [history.data, quote.data]);
 
   const price = quote.data?.price ?? 0;
   const changePct = quote.data?.changePct ?? 0;
