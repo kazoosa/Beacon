@@ -18,6 +18,11 @@ export function getWebhookQueue(): Queue {
 
 export async function startWorkers() {
   if (process.env.NODE_ENV === "test") return;
+  if (process.env.WEBHOOK_WORKER_ENABLED === "false") {
+    // eslint-disable-next-line no-console
+    console.warn("[webhook worker] disabled via WEBHOOK_WORKER_ENABLED=false");
+    return;
+  }
   if (webhookWorker) return;
   const { deliverWebhook } = await import("./webhookDeliveryJob.js");
   webhookWorker = new Worker(

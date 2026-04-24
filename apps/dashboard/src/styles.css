@@ -416,9 +416,15 @@ button:focus-visible,
    ============================================================ */
 
 :root {
-  --stripe-accent: #5b5bd6;           /* indigo, used boldly and sparingly */
+  --stripe-accent: #5b5bd6;           /* indigo, retained for data viz + brand accents (charts, chip, feature rules) */
   --stripe-accent-strong: #4746b5;
   --stripe-accent-soft: #ebebfa;
+
+  /* Button CTAs use a separate ink-derived palette so they read
+     financial-confident rather than AI-startup-purple. */
+  --stripe-cta: #0f172a;              /* deep navy ink */
+  --stripe-cta-strong: #1e293b;       /* hover lift */
+  --stripe-cta-shadow: 15, 23, 42;    /* rgb tuple for shadow tint */
 
   --stripe-ink: #0f0e0d;              /* near-black with warmth */
   --stripe-ink-muted: #4a4741;
@@ -500,9 +506,12 @@ button:focus-visible,
   pointer-events: none;
 }
 
-/* Indigo CTA — sharper 6px radius on landing per the refresh */
+/* Primary CTA — deep navy ink, financial-confident.
+   Intentionally NOT indigo: the indigo accent stays reserved for
+   data/decorative use (charts, feature rules, chip) so primary
+   buttons feel brand-appropriate, not AI-template-purple. */
 .stripe-btn-primary {
-  background: var(--stripe-accent);
+  background: var(--stripe-cta);
   color: #ffffff;
   border-radius: 6px;
   padding: 10px 18px;
@@ -510,19 +519,23 @@ button:focus-visible,
   letter-spacing: -0.005em;
   box-shadow:
     0 1px 1px rgba(15, 14, 13, 0.08),
-    0 2px 6px rgba(91, 91, 214, 0.30);
+    0 2px 6px rgba(var(--stripe-cta-shadow), 0.28);
   transition: transform 150ms var(--stripe-ease),
               box-shadow 150ms var(--stripe-ease),
               background 150ms var(--stripe-ease);
 }
 .stripe-btn-primary:hover {
-  background: var(--stripe-accent-strong);
+  background: var(--stripe-cta-strong);
   transform: translateY(-1px);
   box-shadow:
     0 1px 1px rgba(15, 14, 13, 0.08),
-    0 8px 18px rgba(91, 91, 214, 0.32);
+    0 10px 22px rgba(var(--stripe-cta-shadow), 0.32);
 }
 .stripe-btn-primary:active { transform: translateY(0); }
+.stripe-btn-primary:focus-visible {
+  outline: 2px solid var(--stripe-cta);
+  outline-offset: 2px;
+}
 
 /* Secondary: higher-contrast than a bare outline — near-black border
    on warm surface, fills on hover. */

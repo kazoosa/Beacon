@@ -759,7 +759,7 @@ function PricingCard({
         {tier.badge && !comingSoon && (
           <div
             className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.18em] font-mono font-semibold px-3 py-1 rounded-full text-white"
-            style={{ background: "var(--stripe-accent)" }}
+            style={{ background: "var(--stripe-cta)" }}
           >
             {tier.badge}
           </div>
@@ -787,7 +787,7 @@ function PricingCard({
             to="/register"
             className={`mt-6 w-full inline-flex items-center justify-center gap-1.5 h-11 rounded-md text-[13px] font-medium transition-all ${
               accent
-                ? "bg-[var(--stripe-accent)] text-white hover:bg-[var(--stripe-accent-strong)]"
+                ? "bg-white text-[var(--stripe-cta)] hover:bg-white/90"
                 : "border border-white/25 text-white hover:bg-white/10"
             }`}
           >
@@ -889,7 +889,7 @@ function FaqRow({
       >
         <span className="text-[15px] font-medium text-[var(--stripe-ink)]">{item.q}</span>
         <span className={`flex-shrink-0 w-7 h-7 rounded-full border border-[var(--stripe-hairline)] flex items-center justify-center text-[var(--stripe-ink-muted)] transition-transform duration-300 ${
-          isOpen ? "rotate-45 bg-[var(--stripe-accent)] text-white border-[var(--stripe-accent)]" : "group-hover:border-[var(--stripe-ink-muted)]"
+          isOpen ? "rotate-45 bg-[var(--stripe-cta)] text-white border-[var(--stripe-cta)]" : "group-hover:border-[var(--stripe-ink-muted)]"
         }`}>
           <Plus className="w-3.5 h-3.5" />
         </span>
