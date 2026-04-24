@@ -36,17 +36,47 @@ export async function getPortfolioSummary(developerId: string) {
   }
   const accounts = await prisma.account.findMany({
     where: { itemId: { in: itemIds }, type: "investment" },
-    select: { id: true },
+    select: { id: true, currentBalance: true },
   });
   const accIds = accounts.map((a: { id: string }) => a.id);
 
   const holdings = await prisma.investmentHolding.findMany({
     where: { accountId: { in: accIds } },
+    select: { accountId: true, institutionValue: true, costBasis: true },
   });
-  const totalValue = holdings.reduce(
-    (s: number, h: { institutionValue: number }) => s + h.institutionValue,
+
+  // Net worth = sum of held positions + any uncovered cash balance per
+  // account. Activity-only CSV imports (no positions snapshot) seed
+  // Account.currentBalance from the running cash flow but never write
+  // InvestmentHolding rows, so summing only holdings here showed $0 on
+  // the Overview / Net Worth page even though the Accounts page (which
+  // reads currentBalance directly) showed the right number. Add the
+  // residual cash per-account so the two views agree.
+  const holdingsValueByAccount = new Map<string, number>();
+  for (const h of holdings) {
+    holdingsValueByAccount.set(
+      h.accountId,
+      (holdingsValueByAccount.get(h.accountId) ?? 0) + h.institutionValue,
+    );
+  }
+  const cashSleeve = accounts.reduce(
+    (sum: number, a: { id: string; currentBalance: number }) => {
+      const held = holdingsValueByAccount.get(a.id) ?? 0;
+      const cash = Number(a.currentBalance ?? 0) - held;
+      // Only add positive residual cash. A negative residual means
+      // currentBalance is stale relative to a fresher holdings snapshot
+      // (or the account is on margin); in either case the holdings sum
+      // is the more current ground truth and we don't want to subtract.
+      return cash > 0 ? sum + cash : sum;
+    },
     0,
   );
+
+  const totalValue =
+    holdings.reduce(
+      (s: number, h: { institutionValue: number }) => s + h.institutionValue,
+      0,
+    ) + cashSleeve;
   const costBasis = holdings.reduce(
     (s: number, h: { costBasis: number }) => s + h.costBasis,
     0,
@@ -120,6 +150,13 @@ export async function getPortfolioHoldings(developerId: string) {
     }
   >();
 
+  // Track per-account holdings value so any residual cash in
+  // Account.currentBalance (set from activity-CSV cash flow when no
+  // positions snapshot exists) can be surfaced as a synthetic CASH
+  // row. Without this, an activity-only import shows up on the
+  // Accounts page but not on Holdings or Net Worth.
+  const heldByAccount = new Map<string, number>();
+
   for (const h of rows) {
     const acc = accountMap.get(h.accountId)!;
     const key = h.security.tickerSymbol;
@@ -145,7 +182,45 @@ export async function getPortfolioHoldings(developerId: string) {
       value: h.institutionValue,
     });
     byTicker.set(key, entry);
+    heldByAccount.set(h.accountId, (heldByAccount.get(h.accountId) ?? 0) + h.institutionValue);
   }
+
+  // Synthetic CASH row for any account whose currentBalance exceeds the
+  // sum of its holdings. Same logic as the Overview cash sleeve so the
+  // Holdings page and Net Worth always agree.
+  const cashEntry = {
+    ticker_symbol: "CASH",
+    name: "Cash & equivalents",
+    type: "cash",
+    exchange: null as string | null,
+    close_price: 1,
+    quantity: 0,
+    cost_basis: 0,
+    market_value: 0,
+    locations: [] as Array<{
+      institution: string;
+      institution_color: string;
+      account_name: string;
+      quantity: number;
+      value: number;
+    }>,
+  };
+  for (const acc of accounts) {
+    const held = heldByAccount.get(acc.id) ?? 0;
+    const cash = Number(acc.currentBalance ?? 0) - held;
+    if (cash <= 0) continue;
+    cashEntry.quantity += cash;
+    cashEntry.cost_basis += cash;
+    cashEntry.market_value += cash;
+    cashEntry.locations.push({
+      institution: acc.item.institution.name,
+      institution_color: acc.item.institution.primaryColor,
+      account_name: acc.name,
+      quantity: cash,
+      value: cash,
+    });
+  }
+  if (cashEntry.market_value > 0) byTicker.set("CASH", cashEntry);
 
   const totalValue = [...byTicker.values()].reduce((s, e) => s + e.market_value, 0);
 
