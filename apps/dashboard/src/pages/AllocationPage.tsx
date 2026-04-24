@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
@@ -10,14 +11,17 @@ interface AllocResp {
   by_institution: Array<{ label: string; value: number; weight_pct: number; color: string }>;
   by_type: Array<{ label: string; value: number; weight_pct: number; color: string }>;
   total_value: number;
+  rollup_options: boolean;
 }
 
 export function AllocationPage() {
   const { accessToken } = useAuth();
   const f = apiFetch(() => accessToken);
+  const [rollup, setRollup] = useState(true);
   const q = useQuery({
-    queryKey: ["allocation"],
-    queryFn: () => f<AllocResp>("/api/portfolio/allocation"),
+    queryKey: ["allocation", rollup],
+    queryFn: () =>
+      f<AllocResp>(`/api/portfolio/allocation?rollupOptions=${rollup}`),
   });
 
   if (q.isLoading) {
@@ -49,11 +53,41 @@ export function AllocationPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-fg-primary">Allocation</h1>
-        <p className="text-xs text-fg-muted mt-1">
-          Portfolio value {fmtUsd(q.data.total_value)}
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold text-fg-primary">Allocation</h1>
+          <p className="text-xs text-fg-muted mt-1">
+            Portfolio value {fmtUsd(q.data.total_value)}
+          </p>
+        </div>
+        {/* Options rollup toggle. The default rolls option exposure
+            into the underlying ticker (delta-equivalent share value),
+            so a portfolio of AAPL stock + AAPL calls reads as one
+            AAPL slice. Premium-only mode shows options as their own
+            slice valued at the broker-reported premium × multiplier;
+            useful for thinking about the cash you've actually spent
+            on options vs the directional exposure they give you. */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-fg-muted">
+            Options
+          </span>
+          <div className="flex gap-1 text-xs">
+            <button
+              className={`btn-ghost ${rollup ? "bg-bg-hover text-fg-primary" : ""}`}
+              onClick={() => setRollup(true)}
+              title="Roll option exposure into underlying ticker (delta-equivalent shares)"
+            >
+              Roll up
+            </button>
+            <button
+              className={`btn-ghost ${!rollup ? "bg-bg-hover text-fg-primary" : ""}`}
+              onClick={() => setRollup(false)}
+              title="Show options as their own slice (premium × multiplier)"
+            >
+              Premium
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -71,6 +105,7 @@ const TYPE_LABELS: Record<string, string> = {
   mutual_fund: "Mutual funds",
   fixed_income: "Fixed income",
   cash: "Cash",
+  option: "Options",
 };
 
 function DonutCard({

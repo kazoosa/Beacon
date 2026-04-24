@@ -18,6 +18,17 @@ interface Holding {
   unrealized_pl: number;
   unrealized_pl_pct: number;
   weight_pct: number;
+  // Present only when type === "option". The Holdings table renders
+  // a friendlier inline format ("AMAT $400 CALL · 2 days left")
+  // instead of the raw "-AMAT260424C400" ticker when this is set.
+  option?: {
+    underlying_ticker: string;
+    option_type: "call" | "put";
+    strike: number;
+    expiry: string;
+    multiplier: number;
+    days_to_expiry: number;
+  };
   locations: Array<{
     institution: string;
     institution_color: string;
@@ -25,6 +36,61 @@ interface Holding {
     quantity: number;
     value: number;
   }>;
+}
+
+/**
+ * Pretty-format an option holding's display text:
+ *   "AMAT $400 CALL · Apr 24 · 2d left"
+ * Days-to-expiry color: green > 30, amber 7-30, red < 7. Kept inline
+ * here rather than in a shared component because it's the only spot
+ * the table needs it (OptionsPage uses a richer layout).
+ */
+function formatOptionHeader(o: NonNullable<Holding["option"]>): {
+  text: string;
+  expiryClass: string;
+} {
+  const expDate = new Date(o.expiry + "T00:00:00Z");
+  const monthDay = expDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const dte = o.days_to_expiry;
+  const dteText =
+    dte < 0
+      ? `expired ${Math.abs(dte)}d ago`
+      : dte === 0
+        ? "expires today"
+        : `${dte}d left`;
+  const expiryClass =
+    dte < 0
+      ? "text-fg-fainter"
+      : dte < 7
+        ? "text-rose-400"
+        : dte < 30
+          ? "text-amber-400"
+          : "text-emerald-400";
+  return {
+    text: `${o.underlying_ticker} $${o.strike} ${o.option_type.toUpperCase()} · ${monthDay} · ${dteText}`,
+    expiryClass,
+  };
+}
+
+const HOLDING_KINDS = ["all", "stocks", "etfs", "options", "cash"] as const;
+type HoldingKind = (typeof HOLDING_KINDS)[number];
+
+function holdingMatchesKind(h: Holding, kind: HoldingKind): boolean {
+  if (kind === "all") return true;
+  if (kind === "options") return h.type === "option";
+  if (kind === "cash") return h.type === "cash";
+  if (kind === "etfs") return h.type === "etf";
+  if (kind === "stocks") {
+    // "stocks" = anything that isn't an option, ETF, or cash. Keeps the
+    // filter intuitive even for security types we haven't classified
+    // explicitly (mutual funds, fixed-income, equity fall in here).
+    return h.type !== "option" && h.type !== "etf" && h.type !== "cash";
+  }
+  return true;
 }
 
 export function HoldingsPage() {
@@ -37,25 +103,50 @@ export function HoldingsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sort, setSort] = useState<"value" | "pl" | "weight" | "ticker">("value");
   const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<HoldingKind>("all");
 
   const trimmedQuery = query.trim().toUpperCase();
 
   const sorted = useMemo(() => {
     const all = q.data?.holdings ?? [];
+    const kindFiltered = all.filter((h) => holdingMatchesKind(h, kind));
     const matches = trimmedQuery
-      ? all.filter(
+      ? kindFiltered.filter(
           (h) =>
             h.ticker_symbol.toUpperCase().includes(trimmedQuery) ||
-            h.name.toUpperCase().includes(trimmedQuery),
+            h.name.toUpperCase().includes(trimmedQuery) ||
+            (h.option?.underlying_ticker.toUpperCase().includes(trimmedQuery) ??
+              false),
         )
-      : all;
+      : kindFiltered;
     return [...matches].sort((a, b) => {
       if (sort === "value") return b.market_value - a.market_value;
       if (sort === "pl") return b.unrealized_pl_pct - a.unrealized_pl_pct;
       if (sort === "weight") return b.weight_pct - a.weight_pct;
       return a.ticker_symbol.localeCompare(b.ticker_symbol);
     });
-  }, [q.data, trimmedQuery, sort]);
+  }, [q.data, trimmedQuery, sort, kind]);
+
+  // Count by kind so the filter buttons show how many positions are
+  // in each bucket — useful when an Options filter on a stock-heavy
+  // portfolio would otherwise look broken (zero matches).
+  const kindCounts = useMemo(() => {
+    const all = q.data?.holdings ?? [];
+    const counts: Record<HoldingKind, number> = {
+      all: all.length,
+      stocks: 0,
+      etfs: 0,
+      options: 0,
+      cash: 0,
+    };
+    for (const h of all) {
+      for (const k of HOLDING_KINDS) {
+        if (k === "all") continue;
+        if (holdingMatchesKind(h, k)) counts[k]++;
+      }
+    }
+    return counts;
+  }, [q.data]);
 
   return (
     <div className="space-y-6">
@@ -107,6 +198,29 @@ export function HoldingsPage() {
         </div>
       </div>
 
+      {/* Kind filter strip — separates stocks/ETFs/options/cash so the
+          user can drill into a specific bucket. The all-count and
+          per-kind counts are shown so empty buckets are obviously empty
+          rather than ambiguously empty. */}
+      <div className="flex gap-1 text-xs flex-wrap">
+        {HOLDING_KINDS.map((k) => {
+          const active = kind === k;
+          const count = kindCounts[k];
+          return (
+            <button
+              key={k}
+              className={`btn-ghost capitalize ${active ? "bg-bg-hover text-fg-primary" : ""}`}
+              onClick={() => setKind(k)}
+              disabled={count === 0 && k !== "all"}
+              title={count === 0 ? "No holdings of this type" : undefined}
+            >
+              {k}
+              <span className="ml-1.5 text-fg-fainter font-num">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="card overflow-hidden">
         <table className="table">
           <thead>
@@ -138,16 +252,55 @@ export function HoldingsPage() {
                       {expanded === h.ticker_symbol ? "▾" : "▸"}
                     </td>
                     <td className="font-num text-fg-primary font-semibold">
-                      <Link
-                        to={`/app/stocks?symbol=${encodeURIComponent(h.ticker_symbol)}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="hover:underline underline-offset-2 decoration-fg-muted"
-                        title={`Open ${h.ticker_symbol} details`}
-                      >
-                        {h.ticker_symbol}
-                      </Link>
+                      {h.option ? (
+                        // Option rows display the underlying ticker + a
+                        // small "OPT" badge so the table reads like
+                        // "AMAT (OPT)" instead of the noisy
+                        // "-AMAT260424C400" raw OCC string.
+                        <Link
+                          to={`/app/stocks?symbol=${encodeURIComponent(h.ticker_symbol)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:underline underline-offset-2 decoration-fg-muted inline-flex items-center gap-1.5"
+                          title={`Open ${h.ticker_symbol} details`}
+                        >
+                          <span>{h.option.underlying_ticker}</span>
+                          <span className="text-[9px] uppercase tracking-widest font-mono px-1 py-0.5 rounded bg-bg-overlay text-fg-muted">
+                            opt
+                          </span>
+                        </Link>
+                      ) : (
+                        <Link
+                          to={`/app/stocks?symbol=${encodeURIComponent(h.ticker_symbol)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:underline underline-offset-2 decoration-fg-muted"
+                          title={`Open ${h.ticker_symbol} details`}
+                        >
+                          {h.ticker_symbol}
+                        </Link>
+                      )}
                     </td>
-                    <td className="text-xs text-fg-secondary max-w-[220px] truncate">{h.name}</td>
+                    <td className="text-xs text-fg-secondary max-w-[260px] truncate">
+                      {h.option ? (
+                        (() => {
+                          const fmt = formatOptionHeader(h.option);
+                          // Option name shows contract specifics +
+                          // expiry month/day + days-to-expiry, with the
+                          // dte portion color-coded so a glance tells
+                          // you what's about to expire. Format:
+                          //   "AMAT $400 CALL · Apr 24 · 2d left"
+                          const [specs, monthDay, dte] = fmt.text.split(" · ");
+                          return (
+                            <span>
+                              <span className="text-fg-secondary">{specs}</span>
+                              <span className="text-fg-fainter"> · {monthDay} · </span>
+                              <span className={fmt.expiryClass}>{dte}</span>
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        h.name
+                      )}
+                    </td>
                     <td className="text-right font-num text-fg-secondary">{h.quantity.toFixed(4)}</td>
                     <td className="text-right font-num text-fg-secondary">{fmtUsd(h.avg_cost)}</td>
                     <td className="text-right font-num text-fg-secondary">{fmtUsd(h.close_price)}</td>

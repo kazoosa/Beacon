@@ -111,7 +111,12 @@ router.get("/dividends", async (req, res, next) => {
 
 router.get("/allocation", async (req, res, next) => {
   try {
-    res.json(await getPortfolioAllocation(req.developerId!));
+    // ?rollupOptions=false swaps to "options as their own slice"
+    // (premium × multiplier × contracts). Default is the rollup view
+    // where options contribute delta-equivalent share value to the
+    // underlying ticker.
+    const rollupOptions = req.query.rollupOptions !== "false";
+    res.json(await getPortfolioAllocation(req.developerId!, { rollupOptions }));
   } catch (e) {
     next(e);
   }

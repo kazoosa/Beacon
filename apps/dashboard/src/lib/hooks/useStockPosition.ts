@@ -56,6 +56,33 @@ export interface ActivityItem {
   accountName: string;
 }
 
+/**
+ * Option-detail payload — present only when the symbol IS an option
+ * contract (Security.type === "option" on the backend). Used by the
+ * StockDetail page to render the option-specific layout (strike,
+ * expiry, intrinsic/extrinsic split, Greeks panel) instead of the
+ * equity treatment.
+ */
+export interface OptionDetailPayload {
+  underlying_ticker: string;
+  underlying_name: string;
+  underlying_price: number;
+  option_type: "call" | "put";
+  strike: number;
+  expiry: string;
+  multiplier: number;
+  days_to_expiry: number;
+  intrinsic_per_contract: number;
+  intrinsic_total: number;
+  extrinsic_total: number;
+  delta: number | null;
+  gamma: number | null;
+  theta: number | null;
+  vega: number | null;
+  iv: number | null;
+  greeks_as_of: string | null;
+}
+
 export interface PortfolioBySymbol {
   symbol: string;
   securityId: string | null;
@@ -63,6 +90,8 @@ export interface PortfolioBySymbol {
   exchange: string | null;
   closePrice: number;
   empty: boolean;
+  /** Set when this Security is an option contract; absent otherwise. */
+  option?: OptionDetailPayload;
   position?: {
     sharesHeld: number;
     avgCostPerShare: number;

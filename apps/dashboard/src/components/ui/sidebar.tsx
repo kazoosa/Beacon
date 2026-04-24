@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, type Variants } from "framer-motion";
 import {
+  Activity,
   Building2,
   ChevronsUpDown,
   Coins,
@@ -76,6 +77,7 @@ const NAV_ITEMS: Array<{ sub: string; label: string; Icon: typeof LayoutDashboar
   { sub: "stocks", label: "Stocks", Icon: LineChart },
   { sub: "transactions", label: "Transactions", Icon: Repeat },
   { sub: "dividends", label: "Dividends", Icon: Coins },
+  { sub: "options", label: "Options", Icon: Activity },
   { sub: "allocation", label: "Allocation", Icon: PieChart },
   { sub: "accounts", label: "Accounts", Icon: Building2 },
   { sub: "settings", label: "Settings", Icon: SettingsIcon },

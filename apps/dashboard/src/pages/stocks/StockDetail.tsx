@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
   Area,
@@ -70,6 +71,13 @@ export function StockDetail({
     ]);
   }
 
+  // When the symbol resolves to an option contract, slot a contract
+  // specs + Greeks card right under the header. Equity layout still
+  // renders below it (P/L, performance, dividend calendar) — those
+  // sections work identically for options and just show the option
+  // position numbers.
+  const optionPayload = position.data?.option;
+
   return (
     <div className="space-y-4 md:space-y-5">
       <StockHeader
@@ -78,6 +86,7 @@ export function StockDetail({
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
+      {optionPayload && <OptionContractCard option={optionPayload} />}
       <HistoryChart history={market.history} range={range} onRangeChange={onRangeChange} />
       <TopRow position={position} quote={market.quote} />
       <PLPerformanceSection position={position} />
@@ -85,6 +94,107 @@ export function StockDetail({
       <MidRow symbol={symbol} position={position} news={market.news} />
       <DividendCalendar position={position} />
       <StockTransactionsTable position={position} />
+    </div>
+  );
+}
+
+/* --------------------------------------------- Option contract specs card */
+
+function OptionContractCard({ option }: { option: NonNullable<PortfolioBySymbol["option"]> }) {
+  const dteClass =
+    option.days_to_expiry < 0
+      ? "text-fg-fainter"
+      : option.days_to_expiry < 7
+        ? "text-rose-400"
+        : option.days_to_expiry < 30
+          ? "text-amber-400"
+          : "text-emerald-400";
+  const dteText =
+    option.days_to_expiry < 0
+      ? `Expired ${Math.abs(option.days_to_expiry)} days ago`
+      : option.days_to_expiry === 0
+        ? "Expires today"
+        : `${option.days_to_expiry} days to expiry`;
+  const expDate = new Date(option.expiry + "T00:00:00Z").toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  // Greeks may not be available yet (Tradier refresh job hasn't run
+  // or the contract isn't in their universe). Render placeholders so
+  // the layout doesn't shift when they land later.
+  const fmt = (v: number | null, digits = 3) => (v == null ? "—" : v.toFixed(digits));
+  const greeksFresh = option.greeks_as_of
+    ? new Date(option.greeks_as_of).toLocaleString()
+    : null;
+
+  return (
+    <div className="card p-4 md:p-5 space-y-3">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-widest text-fg-muted mb-1">
+            Option contract
+          </div>
+          <div className="text-lg font-semibold text-fg-primary">
+            <Link
+              to={`?symbol=${encodeURIComponent(option.underlying_ticker)}`}
+              className="hover:underline underline-offset-2 decoration-fg-muted"
+            >
+              {option.underlying_ticker}
+            </Link>{" "}
+            <span className="text-fg-secondary">${option.strike}</span>{" "}
+            {option.option_type.toUpperCase()}
+          </div>
+          <div className="text-xs text-fg-muted mt-0.5">
+            Expires {expDate} · {option.multiplier} shares per contract
+          </div>
+        </div>
+        <div className="text-right">
+          <div className={`text-sm font-semibold ${dteClass}`}>{dteText}</div>
+          <div className="text-[11px] text-fg-muted mt-0.5 font-num">
+            Underlying: {fmtUsd(option.underlying_price)}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+        <OptionStat label="Intrinsic" value={fmtUsd(option.intrinsic_total)} />
+        <OptionStat label="Extrinsic" value={fmtUsd(option.extrinsic_total)} />
+        <OptionStat
+          label="IV"
+          value={option.iv != null ? fmtPct(option.iv * 100, { showSign: false }) : "—"}
+        />
+        <OptionStat label="Delta" value={fmt(option.delta, 3)} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <OptionStat label="Gamma" value={fmt(option.gamma, 4)} small />
+        <OptionStat label="Theta" value={fmt(option.theta, 3)} small />
+        <OptionStat label="Vega" value={fmt(option.vega, 3)} small />
+      </div>
+
+      {greeksFresh ? (
+        <div className="text-[10px] text-fg-fainter font-mono">
+          Greeks updated {greeksFresh}
+        </div>
+      ) : (
+        <div className="text-[10px] text-fg-fainter font-mono">
+          Greeks pending — refresh runs after every brokerage sync
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OptionStat({ label, value, small = false }: { label: string; value: string; small?: boolean }) {
+  return (
+    <div>
+      <div className="text-[10px] text-fg-muted uppercase tracking-wider">{label}</div>
+      <div className={`font-num ${small ? "text-sm" : "text-lg"} text-fg-primary mt-0.5`}>
+        {value}
+      </div>
     </div>
   );
 }

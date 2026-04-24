@@ -15,6 +15,7 @@ import { AllocationPage } from "./pages/AllocationPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StocksPage } from "./pages/stocks/StocksPage";
+import { OptionsPage } from "./pages/OptionsPage";
 
 /**
  * Real-account guard. Anything under `/app/*` requires a real
@@ -78,6 +79,7 @@ const APP_ROUTES: Array<{ path: string; element: React.ReactNode }> = [
   { path: "stocks", element: <StocksPage /> },
   { path: "transactions", element: <TransactionsPage /> },
   { path: "dividends", element: <DividendsPage /> },
+  { path: "options", element: <OptionsPage /> },
   { path: "allocation", element: <AllocationPage /> },
   { path: "accounts", element: <AccountsPage /> },
   { path: "settings", element: <SettingsPage /> },
