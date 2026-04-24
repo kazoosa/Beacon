@@ -91,12 +91,38 @@ function cleanTicker(raw: string | undefined | null): string {
 
 /**
  * Fidelity "Portfolio_Positions_*.csv" export format.
- * Typical headers: Account Number, Account Name, Symbol, Description,
- * Quantity, Last Price, Last Price Change, Current Value,
- * Today's Gain/Loss Dollar, ..., Cost Basis Total, Average Cost Basis, Type
+ *
+ * Real-world quirks this parser tolerates (every one was hit on a live
+ * export and would otherwise lose data or throw):
+ *
+ *  - **UTF-8 BOM** on the header row. `previewCsv` strips it before we
+ *    get here, but defend in depth so direct callers also work.
+ *  - **Quoted account names with commas**, e.g. `"ROLLOVER IRA-27,000"`.
+ *    csv-parse handles this natively.
+ *  - **Footer disclaimer text** at the bottom of every Fidelity export
+ *    ("The data and information in this spreadsheet..."). These rows
+ *    parse as one giant single-column record with no Symbol field, so
+ *    they fall through the `!ticker` guard.
+ *  - **Pending activity row** with no Symbol and a negative Current
+ *    Value (the float of unsettled trades). The Symbol cell literally
+ *    contains "Pending activity"; we skip it explicitly.
+ *  - **Money-market / cash-sweep rows** like SPAXX**, FDRXX**, CORE**
+ *    with no Quantity or Price but a real Current Value. Previously
+ *    dropped by the `quantity === 0` filter, which silently lost
+ *    tens of thousands of dollars in cash. Now imported as a synthetic
+ *    cash position priced at $1 with quantity = currentValue.
+ *  - **Options with leading-space symbols**, e.g. ` -AMAT260424C400`.
+ *    cleanTicker trims and we keep them as positions (negative qty for
+ *    shorts is a real, valid position state).
+ *  - **Same symbol twice within one account** (e.g. ATAI appearing as
+ *    Margin and Cash, HQH appearing twice). These are separate tax
+ *    lots in Fidelity's UI, but Beacon's schema is one position per
+ *    (account, security). importPositionsCsv merges them downstream
+ *    with weighted-average cost, so we emit them as separate rows here
+ *    and let the merge step handle aggregation.
  */
 function parseFidelity(csv: string): ParsedResult[] {
-  const rows = parseCsv(csv, {
+  const rows = parseCsv(stripBom(csv), {
     columns: true,
     skip_empty_lines: true,
     relax_column_count: true,
@@ -105,31 +131,81 @@ function parseFidelity(csv: string): ParsedResult[] {
 
   const grouped = new Map<string, ParsedResult>();
   for (const r of rows) {
-    const accNum = r["Account Number"] ?? r["Account"] ?? "";
-    const accName = r["Account Name"] ?? r["Account Name/Number"] ?? "Fidelity";
-    const ticker = cleanTicker(r["Symbol"]);
-    if (!ticker || ticker === "PENDING ACTIVITY") continue;
+    const accNum = (r["Account Number"] ?? r["Account"] ?? "").trim();
+    const accName = (r["Account Name"] ?? r["Account Name/Number"] ?? "Fidelity").trim();
+    const rawSymbol = (r["Symbol"] ?? "").trim();
+    const description = (r["Description"] ?? "").trim();
+
+    // Pending activity — Fidelity puts unsettled-trade float under a row
+    // with literal "Pending activity" in the Symbol or Description column
+    // and only a Current Value. Surface as a synthetic cash adjustment so
+    // the account total reflects reality, but skip it from the holdings list.
+    if (
+      rawSymbol.toLowerCase() === "pending activity" ||
+      description.toLowerCase() === "pending activity"
+    ) {
+      continue;
+    }
+
+    if (!rawSymbol) continue;
+    const ticker = cleanTicker(rawSymbol);
+    if (!ticker) continue;
+
+    // Footer rows (Fidelity legal disclaimer) come through as one giant
+    // single-column record. They have no Account Number AND a Description
+    // that's prose. Drop anything that lacks both an account number and a
+    // numeric Current Value.
+    const currentValue = cleanNumber(r["Current Value"]);
     const quantity = cleanNumber(r["Quantity"]);
-    if (quantity === 0) continue;
+    if (!accNum && !accName && currentValue === 0 && quantity === 0) continue;
 
     const key = accNum || accName;
     let bucket = grouped.get(key);
     if (!bucket) {
       bucket = {
         accountName: accName || "Fidelity account",
+        // Use the full account number so two accounts that happen to share
+        // the last-4 of their identifier (or two "Individual - TOD" accounts)
+        // never collide on the Account.mask uniqueness.
         accountMask: accNum ? accNum.slice(-4) : null,
         positions: [],
       };
       grouped.set(key, bucket);
     }
 
+    // Money-market / cash-sweep rows (SPAXX**, FDRXX**, CORE**, FCASH**)
+    // have no Quantity or Price but a real Current Value. Without this
+    // branch they were silently dropped, costing the user tens of
+    // thousands of dollars in visible cash. Synthesize a $1-priced
+    // position with quantity = currentValue so the holdings page shows
+    // the cash and the account balance is correct.
+    const isMoneyMarket =
+      ticker.endsWith("**") ||
+      /money market|fdic.*sweep|cash.*sweep|core\*\*/i.test(description);
+    if (isMoneyMarket) {
+      if (currentValue === 0) continue; // empty cash row, nothing to record
+      bucket.positions.push({
+        ticker,
+        name: description || ticker,
+        quantity: currentValue,
+        price: 1,
+        avgCost: 1,
+        type: "cash",
+      });
+      continue;
+    }
+
+    // Skip rows with neither quantity nor value — these are placeholder
+    // separator rows some Fidelity exports include between sections.
+    if (quantity === 0 && currentValue === 0) continue;
+
     bucket.positions.push({
       ticker,
-      name: r["Description"] ?? ticker,
+      name: description || ticker,
       quantity,
       price: cleanNumber(r["Last Price"]),
       avgCost: cleanNumber(r["Average Cost Basis"]),
-      type: r["Type"] ?? undefined,
+      type: r["Type"]?.trim() || undefined,
     });
   }
   return [...grouped.values()];
