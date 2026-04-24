@@ -1175,6 +1175,61 @@ async function importActivityCsv(
         }
       >();
 
+      // Cache option metadata keyed by ticker so the lifecycle branch
+      // can look up strike + multiplier + underlying without an N+1 of
+      // prisma calls inside the chronological loop. We populate on
+      // first sight via parseOptionSymbol (zero DB hit — pure regex)
+      // since by Phase 1 every option ticker resolves to its full
+      // OptionSpec from the symbol alone.
+      const optionCache = new Map<
+        string,
+        ReturnType<typeof parseOptionSymbol>
+      >();
+      const optionMeta = (ticker: string) => {
+        const key = ticker.toUpperCase();
+        if (!optionCache.has(key)) {
+          optionCache.set(key, parseOptionSymbol(ticker));
+        }
+        return optionCache.get(key) ?? null;
+      };
+
+      // Helper: mutate the underlying-equity position when an option
+      // is assigned/exercised. Reuses the same positionsByTicker map
+      // so the underlying flows out as an InvestmentHolding upsert
+      // alongside the option-position clear.
+      const mutateUnderlying = (
+        underlying: string,
+        deltaShares: number, // positive = adds shares, negative = removes
+        costPerShare: number,
+      ) => {
+        if (!underlying || deltaShares === 0) return;
+        const key = underlying.toUpperCase();
+        const pos = positionsByTicker.get(key) ?? {
+          ticker: underlying,
+          name: underlying,
+          quantity: 0,
+          costBasis: 0,
+          lastPrice: costPerShare || 0,
+        };
+        if (deltaShares > 0) {
+          pos.quantity += deltaShares;
+          pos.costBasis += deltaShares * costPerShare;
+        } else {
+          // Reduce at average cost. If the user is being assigned on a
+          // covered call without enough shares (a short call assigned
+          // when they don't own the underlying), we DO let the
+          // quantity go negative — that's a real short stock
+          // position the broker would have created.
+          const avgBefore = pos.quantity > 0 ? pos.costBasis / pos.quantity : 0;
+          const removeQty = Math.abs(deltaShares);
+          const sellQty = Math.min(removeQty, Math.max(0, pos.quantity));
+          pos.quantity -= removeQty;
+          pos.costBasis = Math.max(0, pos.costBasis - avgBefore * sellQty);
+        }
+        if (costPerShare > 0) pos.lastPrice = costPerShare;
+        positionsByTicker.set(key, pos);
+      };
+
       for (const a of sorted) {
         const amt = Number(a.amount) || 0;
         const fees = Number(a.fees) || 0;
@@ -1201,12 +1256,81 @@ async function importActivityCsv(
             // Net-zero cash: the broker pays a dividend and immediately
             // uses the cash to buy more shares. Don't touch cashFlow.
             break;
+          case "option_expired":
+            // Worthless expiration. Premium was paid at open (long) or
+            // received at open (short) — that already moved cash via
+            // the buy/sell row at trade time. Nothing to do here.
+            break;
+          case "option_assigned":
+          case "option_exercised": {
+            // The cash leg is the strike × multiplier × |contracts|
+            // moving in the direction the contract terms dictate.
+            // We use the prior option position direction (sign of qty
+            // in positionsByTicker) to decide which way cash flows:
+            //   * short call assigned -> cash IN (you sold shares at K)
+            //   * short put assigned  -> cash OUT (you bought at K)
+            //   * long call exercised -> cash OUT (you bought at K)
+            //   * long put exercised  -> cash IN (you sold at K)
+            // The underlying mutation is handled in the holdings leg
+            // below so the cash + share legs stay paired in one place.
+            const meta = optionMeta(a.ticker);
+            if (!meta) break;
+            const priorPos = positionsByTicker.get(a.ticker.toUpperCase());
+            const priorQty = priorPos?.quantity ?? 0;
+            const contracts = Math.abs(priorQty || qty);
+            const dollar = meta.strike * contracts * meta.multiplier;
+            const isCall = meta.optionType === "call";
+            const isShort = priorQty < 0;
+            // Short call assigned OR long put exercised -> cash in
+            // Short put assigned OR long call exercised -> cash out
+            const cashIn = (isShort && isCall) || (!isShort && !isCall);
+            cashFlow += cashIn ? dollar : -dollar;
+            break;
+          }
         }
 
         // Holdings leg — BUY and DIVIDEND_REINVESTED both add shares,
         // SELL subtracts. Plain DIVIDEND / INTEREST stay in cash only.
         const addsShares = a.type === "buy" || a.type === "dividend_reinvested";
         const removesShares = a.type === "sell";
+
+        // Option lifecycle: mutate option position + underlying.
+        if (
+          a.type === "option_expired" ||
+          a.type === "option_assigned" ||
+          a.type === "option_exercised"
+        ) {
+          const optKey = a.ticker.toUpperCase();
+          const optPos = positionsByTicker.get(optKey);
+          if (optPos) {
+            const meta = optionMeta(a.ticker);
+            const contracts = Math.abs(optPos.quantity);
+            // For ASSIGNED / EXERCISED we move the underlying.
+            if (
+              meta &&
+              (a.type === "option_assigned" || a.type === "option_exercised")
+            ) {
+              const isCall = meta.optionType === "call";
+              const isShort = optPos.quantity < 0;
+              // Short call assigned -> deliver shares (-)
+              // Short put assigned -> receive shares (+)
+              // Long call exercised -> receive shares (+)
+              // Long put exercised -> deliver shares (-)
+              const receive = (isShort && !isCall) || (!isShort && isCall);
+              mutateUnderlying(
+                meta.underlyingTicker,
+                receive ? contracts * meta.multiplier : -contracts * meta.multiplier,
+                meta.strike,
+              );
+            }
+            // Always clear the option position on lifecycle events.
+            optPos.quantity = 0;
+            optPos.costBasis = 0;
+            positionsByTicker.set(optKey, optPos);
+          }
+          continue;
+        }
+
         if ((addsShares || removesShares) && a.ticker && qty > 0) {
           const key = a.ticker.toUpperCase();
           const pos = positionsByTicker.get(key) ?? {
@@ -1273,6 +1397,11 @@ async function importActivityCsv(
           name: act.description,
           quantity: 0,
           price: act.price,
+          // Activity rows on option contracts (BUY/SELL/EXPIRED/etc on
+          // an option ticker) need to land on a Security row of
+          // type="option" with its OptionContract attached. Reuse the
+          // cache populated above so we don't re-parse for every row.
+          option: optionMeta(act.ticker) ?? undefined,
         });
 
         const runDateKey = act.runDate.toISOString().slice(0, 10);
@@ -1299,6 +1428,54 @@ async function importActivityCsv(
         });
         if (act.type === "dividend") dividendsUpserted++;
         else transactionsUpserted++;
+      }
+
+      // Auto-sweep expired options: any option position still
+      // carrying contracts at this point whose expiry has passed
+      // gets cleared, and a synthetic option_expired transaction is
+      // written so the user has a clean ledger entry. This covers
+      // brokers that don't emit an EXPIRED activity row (or where
+      // the activity feed window cut off before the expiry).
+      const now = new Date();
+      for (const [key, pos] of positionsByTicker) {
+        if (pos.quantity === 0) continue;
+        const meta = optionMeta(pos.ticker);
+        if (!meta) continue;
+        if (meta.expiry.getTime() >= now.getTime()) continue;
+        // Synthetic ledger entry. Idempotent via the deterministic
+        // externalId — re-running the import won't duplicate.
+        const sweepDateKey = meta.expiry.toISOString().slice(0, 10);
+        const externalId = `csv_${developer.id}_${broker}_${sweepDateKey}_OPTION_EXPIRED_SWEEP_${pos.ticker}_${pos.quantity}`;
+        const sec = await upsertSecurityWithTx(tx, {
+          ticker: pos.ticker,
+          name: pos.name,
+          quantity: 0,
+          price: 0,
+          option: meta,
+        });
+        await tx.investmentTransaction.upsert({
+          where: { snaptradeOrderId: externalId },
+          update: {},
+          create: {
+            accountId: account.id,
+            securityId: sec.id,
+            snaptradeOrderId: externalId,
+            date: meta.expiry,
+            name: `${pos.ticker} expired`,
+            type: "option_expired",
+            quantity: -pos.quantity,
+            price: 0,
+            amount: 0,
+            fees: 0,
+            isoCurrencyCode: "USD",
+          },
+        });
+        // Clear the position so it doesn't get persisted as an open
+        // holding below.
+        pos.quantity = 0;
+        pos.costBasis = 0;
+        positionsByTicker.set(key, pos);
+        transactionsUpserted++;
       }
 
       // Persist the derived end-of-history positions as InvestmentHoldings.

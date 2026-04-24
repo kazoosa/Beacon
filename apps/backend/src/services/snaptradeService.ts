@@ -412,6 +412,20 @@ export async function syncDeveloper(developer: Developer): Promise<{
     }
   }
 
+  // Auto-sweep expired options across all of this developer's
+  // connected accounts. SnapTrade reports option lifecycle events
+  // unevenly across brokers — some return OPTIONEXPIRATION as an
+  // activity row, many don't. Without this sweep an expired contract
+  // would linger on the holdings page indefinitely. The synthetic
+  // option_expired transaction is idempotent via snaptradeOrderId.
+  const sweptCount = await sweepExpiredOptions(developer.id);
+  if (sweptCount > 0) {
+    logger.info(
+      { developerId: developer.id, sweptCount },
+      "snaptrade post-sync: swept expired options",
+    );
+  }
+
   logger.info(
     {
       developerId: developer.id,
@@ -449,6 +463,90 @@ export async function deleteSnapTradeConnection(developer: Developer, connection
     authorizationId: connectionId,
   });
   await prisma.item.deleteMany({ where: { snaptradeConnectionId: connectionId } });
+}
+
+/**
+ * Find every option position belonging to this developer whose
+ * contract has already expired but still carries non-zero shares,
+ * write a synthetic option_expired transaction, and zero the
+ * holding. Idempotent: a deterministic snaptradeOrderId means
+ * re-running the sync won't write duplicate ledger entries.
+ *
+ * Called from syncDeveloper after the regular sync completes; also
+ * exported so the CSV importer (Phase 2's auto-sweep) and a future
+ * cron job can reuse the same logic.
+ */
+export async function sweepExpiredOptions(developerId: string): Promise<number> {
+  const now = new Date();
+  // Pull every non-zero holding under this developer whose security
+  // is an expired option contract. The JOIN through item -> account
+  // is wide; relying on Prisma's relation filters keeps it readable.
+  const expiredHoldings = await prisma.investmentHolding.findMany({
+    where: {
+      quantity: { not: 0 },
+      account: {
+        item: { application: { developerId } },
+      },
+      security: {
+        type: "option",
+        optionContract: { expiry: { lt: now } },
+      },
+    },
+    include: {
+      security: { include: { optionContract: true } },
+      account: true,
+    },
+  });
+
+  if (expiredHoldings.length === 0) return 0;
+
+  let swept = 0;
+  for (const h of expiredHoldings) {
+    const oc = h.security.optionContract;
+    if (!oc) continue;
+    const sweepDateKey = oc.expiry.toISOString().slice(0, 10);
+    const externalId = `snaptrade_sweep_${h.accountId}_${sweepDateKey}_OPTION_EXPIRED_${h.security.tickerSymbol}_${h.quantity}`;
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.investmentTransaction.upsert({
+          where: { snaptradeOrderId: externalId },
+          update: {},
+          create: {
+            accountId: h.accountId,
+            securityId: h.securityId,
+            snaptradeOrderId: externalId,
+            date: oc.expiry,
+            name: `${h.security.tickerSymbol} expired`,
+            type: "option_expired",
+            quantity: -h.quantity,
+            price: 0,
+            amount: 0,
+            fees: 0,
+            isoCurrencyCode: "USD",
+          },
+        });
+        // Zero the holding rather than deleting — keeps the
+        // (accountId, securityId) row available for repeat-sync
+        // idempotence and matches what the CSV path does.
+        await tx.investmentHolding.update({
+          where: { id: h.id },
+          data: {
+            quantity: 0,
+            institutionValue: 0,
+            costBasis: 0,
+            institutionPriceAsOf: now,
+          },
+        });
+      });
+      swept++;
+    } catch (err) {
+      logger.warn(
+        { err, holdingId: h.id, ticker: h.security.tickerSymbol },
+        "sweepExpiredOptions: failed to sweep one holding; continuing",
+      );
+    }
+  }
+  return swept;
 }
 
 /**

@@ -82,6 +82,51 @@ describe("classifyActivity — SnapTrade activity type codes", () => {
   });
 });
 
+describe("classifyActivity — option lifecycle labels", () => {
+  // Each lifecycle event behaves differently in the replay (cash leg,
+  // underlying mutation), so they MUST classify to distinct types
+  // rather than collapsing into buy/sell. These cases pin the label
+  // coverage for both SnapTrade-style enum strings and the looser
+  // human-readable strings most CSV exports emit.
+  const cases: Array<[string, ReturnType<typeof classifyActivity>]> = [
+    // SnapTrade enum-style
+    ["OPTIONEXPIRATION",  "option_expired"],
+    ["OPTIONASSIGNMENT",  "option_assigned"],
+    ["OPTIONEXERCISE",    "option_exercised"],
+    ["OPTION_EXPIRATION", "option_expired"],
+    ["OPTION_ASSIGNMENT", "option_assigned"],
+    ["OPTION_EXERCISE",   "option_exercised"],
+    // Common CSV phrasings
+    ["EXPIRED",                  "option_expired"],
+    ["ASSIGNED",                 "option_assigned"],
+    ["EXERCISED",                "option_exercised"],
+    ["OPT EXPIRATION",           "option_expired"],
+    ["OPTION EXPIRATION SHORT",  "option_expired"],
+    ["EXPIRED OPTION",           "option_expired"],
+    ["OPTIONS EXPIRED",          "option_expired"],
+    ["ASSIGNED PUT - AAPL",      "option_assigned"],
+    ["EXERCISED CALL ON SPY",    "option_exercised"],
+  ];
+  it.each(cases)("%s → %s", (input, expected) => {
+    expect(classifyActivity(input)).toBe(expected);
+  });
+
+  it("does NOT collapse option_assigned into transfer (ASSIGNMENT keyword precedence)", () => {
+    // Without the option-lifecycle branch running first, "ASSIGNMENT"
+    // could conceivably match a future broker-emitted "TRANSFER ASSIGNMENT"
+    // label. Pin the precedence: option events win.
+    expect(classifyActivity("OPTION ASSIGNMENT")).toBe("option_assigned");
+  });
+
+  it("does NOT classify plain BUY/SELL on an option ticker as a lifecycle event", () => {
+    // The lifecycle branch only matches expired/assigned/exercised
+    // labels — buying or selling an option contract is still a buy/sell
+    // (the share-count replay handles those rows).
+    expect(classifyActivity("YOU BOUGHT")).toBe("buy");
+    expect(classifyActivity("YOU SOLD")).toBe("sell");
+  });
+});
+
 describe("classifyActivity — normalisation", () => {
   it("upper-cases input for the caller", () => {
     expect(classifyActivity("you bought")).toBe("buy");

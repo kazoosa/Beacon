@@ -20,7 +20,13 @@ export type ActivityType =
   | "dividend_reinvested"
   | "interest"
   | "fee"
-  | "transfer";
+  | "transfer"
+  // Option lifecycle events. Each behaves differently in the replay
+  // and on the cash leg, so they get their own type rather than being
+  // collapsed into buy/sell — see the importer's switch for the math.
+  | "option_expired"
+  | "option_assigned"
+  | "option_exercised";
 
 /**
  * Income-style activity types — used by reporting queries so reinvested
@@ -35,6 +41,47 @@ export function classifyActivity(rawLabel: string | null | undefined): ActivityT
   if (!rawLabel) return null;
   const a = String(rawLabel).trim().toUpperCase();
   if (!a) return null;
+
+  // OPTION LIFECYCLE events first — these labels often contain
+  // substrings that would otherwise match later branches (an
+  // "OPTION ASSIGNMENT" row would hit "ASSIGNMENT" and never get to
+  // a more specific check). Each gets its own type so the replay
+  // can apply distinct cash + share legs:
+  //   * EXPIRED  -> position cleared, cash unchanged (worthless)
+  //   * ASSIGNED -> short option closed; underlying shares move at strike
+  //   * EXERCISED -> long option closed; underlying shares move at strike
+  if (
+    a === "OPTIONEXPIRATION" ||
+    a === "OPTION_EXPIRATION" ||
+    a === "OPT EXPIRATION" ||
+    a === "EXPIRED" ||
+    a.includes("OPTION EXPIRATION") ||
+    a.includes("EXPIRED OPTION") ||
+    a.includes("OPTIONS EXPIRED")
+  )
+    return "option_expired";
+
+  if (
+    a === "OPTIONASSIGNMENT" ||
+    a === "OPTION_ASSIGNMENT" ||
+    a === "OPT ASSIGNMENT" ||
+    a === "ASSIGNED" ||
+    a.includes("OPTION ASSIGNMENT") ||
+    a.includes("ASSIGNED PUT") ||
+    a.includes("ASSIGNED CALL")
+  )
+    return "option_assigned";
+
+  if (
+    a === "OPTIONEXERCISE" ||
+    a === "OPTION_EXERCISE" ||
+    a === "OPT EXERCISE" ||
+    a === "EXERCISED" ||
+    a.includes("OPTION EXERCISE") ||
+    a.includes("EXERCISED PUT") ||
+    a.includes("EXERCISED CALL")
+  )
+    return "option_exercised";
 
   // DIVIDEND + REINVEST first (either order): SnapTrade ships
   // DIVIDEND_REINVESTED, Fidelity ships REINVESTMENT (usually on a
