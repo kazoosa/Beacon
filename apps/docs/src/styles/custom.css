@@ -1,0 +1,22 @@
+/* Beacon docs custom theme tokens.
+   Pulls from the dashboard's deep-ink accent so the two surfaces
+   look like they're from the same product. Starlight handles dark
+   mode automatically — these tokens override the defaults so the
+   accent color matches what users see on vesly-dashboard. */
+:root {
+  --sl-color-accent-low: #1a1d2e;
+  --sl-color-accent: #475569;
+  --sl-color-accent-high: #cbd5e1;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #e2e8f0;
+  --sl-color-accent: #0f172a;
+  --sl-color-accent-high: #1e293b;
+}
+
+/* Tighter line-height for code blocks — the default Starlight is
+   slightly airy and our code samples are dense. */
+.expressive-code pre {
+  line-height: 1.5;
+}

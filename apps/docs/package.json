@@ -1,0 +1,19 @@
+{
+  "name": "@finlink/docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --port 4321 --host",
+    "build": "node scripts/generateTraceability.mjs && astro build",
+    "preview": "astro preview --port 4321",
+    "typecheck": "astro check",
+    "regen-traceability": "node scripts/generateTraceability.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.30.6",
+    "astro": "5.0.5",
+    "sharp": "^0.33.5",
+    "zod": "^3.23.0"
+  }
+}

@@ -1,0 +1,65 @@
+---
+title: Beacon Technical Documentation
+description: Architecture, ADRs, runbooks, testing strategy, and onboarding for the Beacon portfolio dashboard.
+template: splash
+hero:
+  tagline: Everything an engineer needs to ship to Beacon — from local setup to incident response.
+  actions:
+    - text: Start onboarding
+      link: /onboarding/welcome/
+      icon: right-arrow
+      variant: primary
+    - text: Architecture overview
+      link: /architecture/overview/
+      icon: external
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+## What this site is for
+
+This is the engineering source of truth for Beacon. New engineers land here
+on day one and shouldn't need to read the codebase to know what we built,
+why we built it that way, and how to operate it. Existing engineers come
+back for runbooks and ADRs.
+
+The content is hand-written; the test↔feature traceability matrix is
+auto-generated from `vitest` describe blocks at build time so it stays
+honest.
+
+<CardGrid>
+  <Card title="Onboarding" icon="rocket">
+    Get a local Beacon stack running in under 30 minutes. Repo tour,
+    services map, accounts you'll need.
+  </Card>
+  <Card title="Architecture" icon="setting">
+    Tech stack, data model, auth flows, external services, deployment
+    topology. Read this before your first PR.
+  </Card>
+  <Card title="Epics & Stories" icon="open-book">
+    Major features Beacon ships with — what they do, why they exist,
+    and the stories that built them.
+  </Card>
+  <Card title="ADRs" icon="document">
+    Architecture Decision Records. Each one captures a meaningful
+    technical choice and the trade-offs we accepted.
+  </Card>
+  <Card title="Runbooks" icon="warning">
+    Incident playbooks. SnapTrade outages, Redis quota, Tradier rate
+    limits, deploy stuck on Render — the answers live here.
+  </Card>
+  <Card title="Testing" icon="approve-check">
+    Strategy, fixtures, UAT plans, and the auto-generated
+    test↔feature traceability matrix.
+  </Card>
+</CardGrid>
+
+## Conventions
+
+- **Code paths** are linked relative to repo root: `apps/backend/src/...`
+- **Commit hashes** in ADRs and epics link to GitHub.
+- **External services** (Render, Vercel, Neon, Upstash, Tradier, SnapTrade)
+  are introduced in [Architecture → External services](/architecture/external-services/)
+  before they're referenced anywhere else.
+- **TODOs / known gaps** are explicit. If we haven't decided something,
+  the doc says "open question" — it doesn't pretend.
