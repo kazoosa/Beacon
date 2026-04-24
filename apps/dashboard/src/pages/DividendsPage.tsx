@@ -62,11 +62,16 @@ export function DividendsPage() {
         <h1 className="text-xl font-semibold text-fg-primary">Dividends</h1>
         <div className="card p-10 text-center">
           <h2 className="text-fg-primary mb-2">No dividend income yet</h2>
+          <p className="text-sm text-fg-secondary max-w-md mx-auto mb-2">
+            Dividends are pulled from your broker's <strong>activity</strong> CSV (the
+            file with buys, sells, dividends, and fees) — not from a positions snapshot.
+          </p>
           <p className="text-sm text-fg-secondary max-w-md mx-auto mb-5">
-            Once your connected brokerages pay out dividends or interest, you'll see them here with monthly breakdowns and top payers.
+            If you've only uploaded positions, your holdings show up but your dividend
+            history won't. Connect a brokerage via auto-sync, or import an activity CSV.
           </p>
           <Link to={to("accounts")} className="btn-primary text-xs inline-flex">
-            Connect a brokerage
+            Import an activity CSV
           </Link>
         </div>
       </div>

@@ -196,17 +196,29 @@ export function TransactionsPage() {
             ))}
             {rows.length === 0 && !q.isLoading && !q.isError && (
               <tr>
-                <td colSpan={7} className="text-center text-fg-muted py-10">
+                <td colSpan={7} className="py-10 text-center">
                   {(q.data?.transactions.length ?? 0) === 0 ? (
-                    <>
-                      No transactions yet.{" "}
-                      <Link to={to("accounts")} className="text-fg-primary hover:underline">
-                        Connect a brokerage
-                      </Link>{" "}
-                      or import a CSV.
-                    </>
+                    <div className="space-y-2">
+                      <div className="text-sm text-fg-primary font-medium">
+                        No transactions yet
+                      </div>
+                      <div className="text-xs text-fg-muted max-w-md mx-auto leading-relaxed">
+                        Transactions come from your broker's <strong>activity</strong> export
+                        (buys, sells, dividends, fees) — not from the positions snapshot.
+                        If you've only uploaded a positions CSV, your holdings will show up
+                        but your trade history won't.
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          to={to("accounts")}
+                          className="btn-primary text-xs inline-flex"
+                        >
+                          Import an activity CSV
+                        </Link>
+                      </div>
+                    </div>
                   ) : (
-                    "No transactions match your filters."
+                    <span className="text-fg-muted">No transactions match your filters.</span>
                   )}
                 </td>
               </tr>
