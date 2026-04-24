@@ -14,6 +14,7 @@ import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { Errors } from "../utils/errors.js";
 import { classifyActivity } from "./activityClassifier.js";
+import { parseOptionSymbol, type OptionSpec } from "./optionSymbolParser.js";
 
 let clientInstance: Snaptrade | null = null;
 
@@ -211,7 +212,7 @@ export async function syncDeveloper(developer: Developer): Promise<{
         // {symbol:{symbol:{symbol,description}}}, and the universal
         // case where only `raw_symbol` carries the ticker. Try them
         // all before giving up.
-        const { ticker, description, typeDesc, embeddedPrice, embeddedUnits, embeddedAvg } =
+        const { ticker, description, typeDesc, embeddedPrice, embeddedUnits, embeddedAvg, option } =
           extractPositionSymbol(pos);
 
         const quantity = Number(pos.units ?? embeddedUnits ?? 0);
@@ -219,8 +220,13 @@ export async function syncDeveloper(developer: Developer): Promise<{
         const avgCost = Number(
           pos.average_purchase_price ?? embeddedAvg ?? price,
         );
-        const value = quantity * price;
-        const costBasis = quantity * avgCost;
+        // Apply contract multiplier for options (×100 standard equity).
+        // institutionPrice stays as the per-contract premium (matches
+        // what the broker shows on the position screen); value and
+        // costBasis carry the full dollar exposure.
+        const mult = option?.multiplier ?? 1;
+        const value = quantity * price * mult;
+        const costBasis = quantity * avgCost * mult;
 
         if (!ticker) {
           // Don't silently drop — log the unrecognised shape so we can
@@ -238,7 +244,7 @@ export async function syncDeveloper(developer: Developer): Promise<{
         }
 
         try {
-          const security = await upsertSecurity(ticker, description, price, typeDesc);
+          const security = await upsertSecurity(ticker, description, price, typeDesc, option);
           // upsert keyed on (accountId, securityId) so a stale row from
           // a previous partial sync doesn't trigger P2002 and abort.
           await prisma.investmentHolding.upsert({
@@ -349,7 +355,12 @@ export async function syncDeveloper(developer: Developer): Promise<{
         const date = parseIsoDate(act.trade_date) ?? parseIsoDate(act.settlement_date) ?? new Date();
         const tradeDateKey = date.toISOString().slice(0, 10);
 
-        const security = await upsertSecurity(ticker, description, price);
+        // Option detection on activity rows so a BUY/SELL on an option
+        // contract creates the OptionContract row alongside the Security
+        // — same path the position-sync uses. parseOptionSymbol returns
+        // null for plain equity tickers, no-op for those.
+        const actOption = parseOptionSymbol(act.symbol) ?? parseOptionSymbol(ticker) ?? undefined;
+        const security = await upsertSecurity(ticker, description, price, undefined, actOption);
 
         // Use SnapTrade's id when present; fall back to a deterministic
         // composite so we never silently drop rows and re-syncs remain
@@ -467,7 +478,64 @@ async function upsertSecurity(
   name: string,
   price: number,
   typeDescription?: string,
+  option?: OptionSpec,
 ) {
+  // Option path: upsert the underlying first, the option Security
+  // second, then the OptionContract row. Same shape the CSV importer
+  // uses (csvImportService.ts -> upsertSecurityWithTx) so the two
+  // import paths stay in lockstep.
+  if (option) {
+    const underlying = await prisma.security.upsert({
+      where: { tickerSymbol: option.underlyingTicker },
+      update: {},
+      create: {
+        tickerSymbol: option.underlyingTicker,
+        name: option.underlyingTicker,
+        type: "equity",
+        closePrice: 0,
+        closePriceAsOf: new Date(),
+        isoCurrencyCode: "USD",
+      },
+    });
+    const optionSec = await prisma.security.upsert({
+      where: { tickerSymbol: ticker },
+      update: {
+        name,
+        closePrice: price,
+        closePriceAsOf: new Date(),
+        type: "option",
+      },
+      create: {
+        tickerSymbol: ticker,
+        name,
+        type: "option",
+        closePrice: price,
+        closePriceAsOf: new Date(),
+        isoCurrencyCode: "USD",
+      },
+    });
+    await prisma.optionContract.upsert({
+      where: { securityId: optionSec.id },
+      update: {
+        underlyingId: underlying.id,
+        optionType: option.optionType,
+        strike: option.strike,
+        expiry: option.expiry,
+        multiplier: option.multiplier,
+        occSymbol: option.occSymbol,
+      },
+      create: {
+        securityId: optionSec.id,
+        underlyingId: underlying.id,
+        optionType: option.optionType,
+        strike: option.strike,
+        expiry: option.expiry,
+        multiplier: option.multiplier,
+        occSymbol: option.occSymbol,
+      },
+    });
+    return optionSec;
+  }
   const normalizedType = classifySecurityType(typeDescription);
   return prisma.security.upsert({
     where: { tickerSymbol: ticker },
@@ -570,7 +638,29 @@ function extractPositionSymbol(pos: Record<string, unknown>): {
   embeddedPrice?: number;
   embeddedUnits?: number;
   embeddedAvg?: number;
+  option?: OptionSpec;
 } {
+  // Option detection runs FIRST: SnapTrade nests strike_price /
+  // expiration_date / option_type alongside option_symbol on option
+  // positions. Recognised contracts get a normalized OptionSpec; the
+  // ticker we return is the canonical OCC string so the same contract
+  // landed via Fidelity CSV and SnapTrade reconciles to one Security
+  // row downstream.
+  const option = parseOptionSymbol(pos.symbol);
+  if (option) {
+    const desc =
+      stringDeepFromObject(pos.symbol, ["description"]) ?? option.occSymbol;
+    return {
+      ticker: option.occSymbol,
+      description: desc,
+      typeDesc: "option",
+      embeddedPrice: numberDeepFromObject(pos, ["price"]),
+      embeddedUnits: numberDeepFromObject(pos, ["units"]),
+      embeddedAvg: numberDeepFromObject(pos, ["average_purchase_price"]),
+      option,
+    };
+  }
+
   const raw = pos.symbol;
   // Bare string at the top level
   if (typeof raw === "string" && raw.trim()) {
@@ -636,6 +726,36 @@ function safeNumber(v: unknown, fallback = 0): number {
   if (v === null || v === undefined || v === "") return fallback;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Walk an unknown SnapTrade object up to two levels of nesting to find
+ * the first non-empty string at any of the given keys. Used by the
+ * option-aware path to pick out a "description" wherever the broker
+ * decided to put it.
+ */
+function stringDeepFromObject(o: unknown, keys: string[]): string | undefined {
+  if (!o || typeof o !== "object") return undefined;
+  const obj = o as Record<string, unknown>;
+  for (const k of keys) {
+    if (typeof obj[k] === "string" && (obj[k] as string).trim()) return obj[k] as string;
+  }
+  for (const k of Object.keys(obj)) {
+    if (obj[k] && typeof obj[k] === "object") {
+      const inner = stringDeepFromObject(obj[k], keys);
+      if (inner) return inner;
+    }
+  }
+  return undefined;
+}
+function numberDeepFromObject(o: unknown, keys: string[]): number | undefined {
+  if (!o || typeof o !== "object") return undefined;
+  const obj = o as Record<string, unknown>;
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return undefined;
 }
 
 /** Parse a SnapTrade date string; return null if missing or malformed. */

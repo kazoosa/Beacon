@@ -57,6 +57,31 @@ describe("parseFidelity (real-world export shape)", () => {
     expect(opt!.quantity).toBe(-1); // short position
   });
 
+  it("attaches a parsed OptionSpec to recognized option tickers", () => {
+    // The previewCsv pipeline runs option detection after merge, so
+    // every option row should arrive at the importer with an
+    // OptionSpec already attached. This is the hand-off the importer
+    // relies on to upsert OptionContract rows + apply the contract
+    // multiplier to institutionValue.
+    const acct = result.find((r) => r.accountMask === "7572")!;
+    const opt = acct.positions.find((p) => p.ticker === "-AMAT260424C400");
+    expect(opt).toBeDefined();
+    expect(opt!.option).toBeDefined();
+    expect(opt!.option!.underlyingTicker).toBe("AMAT");
+    expect(opt!.option!.optionType).toBe("call");
+    expect(opt!.option!.strike).toBe(400);
+    expect(opt!.option!.expiry.toISOString().slice(0, 10)).toBe("2026-04-24");
+    expect(opt!.option!.multiplier).toBe(100);
+    expect(opt!.option!.occSymbol).toBe("AMAT  260424C00400000");
+  });
+
+  it("leaves equity rows without an OptionSpec", () => {
+    const acct = result.find((r) => r.accountMask === "7572")!;
+    const equity = acct.positions.find((p) => p.ticker === "AMAT");
+    expect(equity).toBeDefined();
+    expect(equity!.option).toBeUndefined();
+  });
+
   it("merges same-ticker rows in the same account into one position", () => {
     // ATAI appears twice for account 237179178 (Margin lot of 300 +
     // Cash lot of 1000). Beacon's schema is one holding per

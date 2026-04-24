@@ -200,6 +200,9 @@ model Security {
   id                String   @id @default(cuid())
   tickerSymbol      String   @unique
   name              String
+  // "equity" | "etf" | "mutual_fund" | "fixed_income" | "cash" | "option"
+  // The "option" value gates option-specific UI/queries; existing equity
+  // queries can opt out via WHERE type != 'option' once they need to.
   type              String
   closePrice        Float
   closePriceAsOf    DateTime
@@ -210,6 +213,54 @@ model Security {
 
   holdings          InvestmentHolding[]
   investmentTransactions InvestmentTransaction[]
+
+  // Set when this Security IS an option contract.
+  optionContract    OptionContract? @relation("OptionSecurity")
+  // Reverse side: every OptionContract whose underlying is THIS security.
+  derivedOptions    OptionContract[] @relation("OptionUnderlying")
+}
+
+// First-class options support. Each row is 1:1 with a Security (whose
+// type is "option") and points at the Security row for the underlying.
+// The contract carries strike/expiry/multiplier so all valuation +
+// lifecycle math has a single source of truth, and last-known greeks
+// from the data feed (Tradier in Phase 3) live alongside.
+model OptionContract {
+  id              String   @id @default(cuid())
+
+  // The Security row representing the option contract itself.
+  securityId      String   @unique
+  security        Security @relation("OptionSecurity", fields: [securityId], references: [id], onDelete: Cascade)
+
+  // The Security row for the underlying (AAPL, AMAT, SPY, etc).
+  underlyingId    String
+  underlying      Security @relation("OptionUnderlying", fields: [underlyingId], references: [id])
+
+  optionType      String   // "call" | "put"
+  strike          Float
+  expiry          DateTime
+  // Standard equity options multiply share-equivalent by 100; mini
+  // options use 10. Stored explicitly so unusual contracts (LEAPs on
+  // adjusted symbols, post-split contracts) can carry their own value.
+  multiplier      Int      @default(100)
+
+  // OCC-format symbol for stable identity across brokers
+  // e.g. "AMAT  260424C00400000"
+  occSymbol       String?  @unique
+
+  // Last-known greeks/IV from the data feed (filled in Phase 3).
+  delta           Float?
+  gamma           Float?
+  theta           Float?
+  vega            Float?
+  iv              Float?
+  greeksAsOf      DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([underlyingId])
+  @@index([expiry])
 }
 
 model InvestmentHolding {

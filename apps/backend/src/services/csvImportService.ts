@@ -13,6 +13,7 @@ import { hashSecret, randomToken, sha256Hex } from "../utils/crypto.js";
 import { Errors } from "../utils/errors.js";
 import { logger } from "../logger.js";
 import { classifyActivity, type ActivityType } from "./activityClassifier.js";
+import { parseOptionSymbol } from "./optionSymbolParser.js";
 
 export type Broker =
   | "fidelity"
@@ -32,6 +33,15 @@ interface ParsedPosition {
   price: number;
   avgCost?: number;
   type?: string;
+  /**
+   * Filled by the option-symbol parser when the ticker resolves to a
+   * recognized option (Fidelity-style "-AMAT260424C400", canonical OCC,
+   * or SnapTrade structured payload). Importer uses this to upsert an
+   * OptionContract row alongside the Security/Holding rows and to
+   * apply the contract multiplier (×100 for standard equity options)
+   * when computing institutionValue and costBasis.
+   */
+  option?: import("./optionSymbolParser.js").OptionSpec;
 }
 
 interface ParsedResult {
@@ -689,13 +699,34 @@ export function previewCsv(broker: Broker, csv: string): ParsedResult[] {
     // mergeDuplicateLots is also called inside parseFidelity, but
     // applying it here too means every other broker's parser is
     // protected for free without each one having to remember.
-    return mergeDuplicateLots(parser(stripBom(csv)));
+    const merged = mergeDuplicateLots(parser(stripBom(csv)));
+    // Option detection runs once for every parsed position regardless
+    // of broker, so each parser stays focused on column extraction.
+    // parseOptionSymbol returns null for plain equities — completely
+    // safe no-op for stock rows.
+    return attachOptionSpecs(merged);
   } catch (err) {
     logger.warn({ err, broker }, "CSV parse failed");
     throw Errors.badRequest(
       `Couldn't parse that CSV. Make sure you're uploading the standard ${BROKER_LABELS[broker]} positions export.`,
     );
   }
+}
+
+/**
+ * Detects option contracts among parsed positions and stamps the
+ * recognized OptionSpec onto each row. Equity rows are left untouched.
+ * Applied centrally in previewCsv so each broker parser doesn't have
+ * to remember to do it.
+ */
+function attachOptionSpecs(buckets: ParsedResult[]): ParsedResult[] {
+  for (const b of buckets) {
+    for (const pos of b.positions) {
+      const spec = parseOptionSymbol(pos.ticker);
+      if (spec) pos.option = spec;
+    }
+  }
+  return buckets;
 }
 
 /**
@@ -971,6 +1002,14 @@ async function importPositionsCsv(
     let accountsTouched = 0;
     let holdingsCreated = 0;
     for (const group of parsed) {
+      // Equity option contracts settle in lots of 100 shares (or 10 for
+      // mini options). The broker reports per-contract premium, not the
+      // dollar exposure — multiply by the OptionContract.multiplier so
+      // the account balance reflects real dollars at risk.
+      const accountValue = group.positions.reduce(
+        (s, p) => s + p.quantity * p.price * (p.option?.multiplier ?? 1),
+        0,
+      );
       const account = await tx.account.create({
         data: {
           itemId,
@@ -979,8 +1018,8 @@ async function importPositionsCsv(
           mask: group.accountMask ?? "0000",
           type: "investment",
           subtype: "brokerage",
-          currentBalance: group.positions.reduce((s, p) => s + p.quantity * p.price, 0),
-          availableBalance: group.positions.reduce((s, p) => s + p.quantity * p.price, 0),
+          currentBalance: accountValue,
+          availableBalance: accountValue,
           isoCurrencyCode: "USD",
         },
       });
@@ -1014,6 +1053,13 @@ async function importPositionsCsv(
 
       for (const pos of merged.values()) {
         const security = await upsertSecurityWithTx(tx, pos);
+        // Apply contract multiplier for options. institutionPrice stays
+        // as the per-contract premium (matches what the broker
+        // displays on the position screen); institutionValue and
+        // costBasis carry the full dollar exposure.
+        const mult = pos.option?.multiplier ?? 1;
+        const institutionValue = pos.quantity * pos.price * mult;
+        const costBasis = (pos.avgCost ?? pos.price) * pos.quantity * mult;
         // Use upsert keyed on the (accountId, securityId) unique so the
         // import stays idempotent even if a previous disconnect didn't
         // cascade cleanly — without this, leftover holdings from a stale
@@ -1030,16 +1076,16 @@ async function importPositionsCsv(
             quantity: pos.quantity,
             institutionPrice: pos.price,
             institutionPriceAsOf: new Date(),
-            institutionValue: pos.quantity * pos.price,
-            costBasis: (pos.avgCost ?? pos.price) * pos.quantity,
+            institutionValue,
+            costBasis,
             isoCurrencyCode: "USD",
           },
           update: {
             quantity: pos.quantity,
             institutionPrice: pos.price,
             institutionPriceAsOf: new Date(),
-            institutionValue: pos.quantity * pos.price,
-            costBasis: (pos.avgCost ?? pos.price) * pos.quantity,
+            institutionValue,
+            costBasis,
           },
         });
         holdingsCreated++;
@@ -1258,15 +1304,28 @@ async function importActivityCsv(
       // Persist the derived end-of-history positions as InvestmentHoldings.
       // upsert keyed on (accountId, securityId) so re-running the import
       // updates the same row instead of colliding on the unique constraint.
+      // quantity === 0 means the position was opened and closed within
+      // the history window; skip it. Negative quantities are real
+      // (short call, short put) — keep them.
       for (const pos of positionsByTicker.values()) {
-        if (pos.quantity <= 0) continue;
+        if (pos.quantity === 0) continue;
         const security = await upsertSecurityWithTx(tx, {
           ticker: pos.ticker,
           name: pos.name,
           quantity: pos.quantity,
           price: pos.lastPrice,
+          option: parseOptionSymbol(pos.ticker) ?? undefined,
         });
-        const avgCost = pos.quantity > 0 ? pos.costBasis / pos.quantity : pos.lastPrice;
+        // Activity-derived institutionValue applies the contract
+        // multiplier (×100 for standard equity options). pos.costBasis
+        // already carries the broker-reported total dollars (Fidelity's
+        // Amount column for an option buy is premium × 100 × qty), so
+        // it's left as-is. avgCost is unused here — kept for
+        // backward compatibility with the prior behavior on equities.
+        void (pos.quantity > 0 ? pos.costBasis / pos.quantity : pos.lastPrice);
+        const oc = parseOptionSymbol(pos.ticker);
+        const mult = oc?.multiplier ?? 1;
+        const institutionValue = pos.quantity * pos.lastPrice * mult;
         await tx.investmentHolding.upsert({
           where: {
             accountId_securityId: { accountId: account.id, securityId: security.id },
@@ -1277,7 +1336,7 @@ async function importActivityCsv(
             quantity: pos.quantity,
             institutionPrice: pos.lastPrice,
             institutionPriceAsOf: new Date(),
-            institutionValue: pos.quantity * pos.lastPrice,
+            institutionValue,
             costBasis: pos.costBasis,
             isoCurrencyCode: "USD",
           },
@@ -1285,7 +1344,7 @@ async function importActivityCsv(
             quantity: pos.quantity,
             institutionPrice: pos.lastPrice,
             institutionPriceAsOf: new Date(),
-            institutionValue: pos.quantity * pos.lastPrice,
+            institutionValue,
             costBasis: pos.costBasis,
           },
         });
@@ -1347,6 +1406,65 @@ async function upsertSecurityWithTx(
   tx: PrismaTx | typeof prisma,
   pos: ParsedPosition,
 ) {
+  // Option rows take a different write path: upsert the underlying
+  // Security first, upsert the option Security with type="option", then
+  // upsert the OptionContract row tying them together. The caller gets
+  // back the option Security (the same shape upsertSecurityWithTx
+  // returns for equities) so the rest of the importer doesn't have to
+  // care which kind it's writing.
+  if (pos.option) {
+    const underlying = await tx.security.upsert({
+      where: { tickerSymbol: pos.option.underlyingTicker },
+      update: {},
+      create: {
+        tickerSymbol: pos.option.underlyingTicker,
+        name: pos.option.underlyingTicker,
+        type: "equity", // could be ETF — the underlying's existing row wins via the empty update
+        closePrice: 0,
+        closePriceAsOf: new Date(),
+        isoCurrencyCode: "USD",
+      },
+    });
+    const optionSec = await tx.security.upsert({
+      where: { tickerSymbol: pos.ticker },
+      update: {
+        name: pos.name,
+        closePrice: pos.price,
+        closePriceAsOf: new Date(),
+        type: "option",
+      },
+      create: {
+        tickerSymbol: pos.ticker,
+        name: pos.name,
+        type: "option",
+        closePrice: pos.price,
+        closePriceAsOf: new Date(),
+        isoCurrencyCode: "USD",
+      },
+    });
+    await tx.optionContract.upsert({
+      where: { securityId: optionSec.id },
+      update: {
+        underlyingId: underlying.id,
+        optionType: pos.option.optionType,
+        strike: pos.option.strike,
+        expiry: pos.option.expiry,
+        multiplier: pos.option.multiplier,
+        occSymbol: pos.option.occSymbol,
+      },
+      create: {
+        securityId: optionSec.id,
+        underlyingId: underlying.id,
+        optionType: pos.option.optionType,
+        strike: pos.option.strike,
+        expiry: pos.option.expiry,
+        multiplier: pos.option.multiplier,
+        occSymbol: pos.option.occSymbol,
+      },
+    });
+    return optionSec;
+  }
+
   const normalizedType = classifyType(pos.type);
   return tx.security.upsert({
     where: { tickerSymbol: pos.ticker },

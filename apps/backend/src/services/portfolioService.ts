@@ -131,7 +131,16 @@ export async function getPortfolioHoldings(developerId: string) {
 
   const rows = await prisma.investmentHolding.findMany({
     where: { accountId: { in: accIds } },
-    include: { security: true },
+    include: {
+      security: {
+        include: {
+          // Pull option metadata along so the consolidated row can carry
+          // strike/expiry/type/multiplier/underlying — the UI needs these
+          // to render an OptionRow instead of a generic stock row.
+          optionContract: { include: { underlying: true } },
+        },
+      },
+    },
   });
 
   // Group by ticker (consolidating across brokerages)
@@ -146,6 +155,17 @@ export async function getPortfolioHoldings(developerId: string) {
       quantity: number;
       cost_basis: number;
       market_value: number;
+      // Option metadata, present only when security.type === "option".
+      // Carrying it on the consolidated row means the UI doesn't need
+      // a second round-trip when it lays out the Options page.
+      option?: {
+        underlying_ticker: string;
+        option_type: "call" | "put";
+        strike: number;
+        expiry: string; // ISO date
+        multiplier: number;
+        days_to_expiry: number;
+      };
       locations: Array<{ institution: string; institution_color: string; account_name: string; quantity: number; value: number }>;
     }
   >();
@@ -160,6 +180,7 @@ export async function getPortfolioHoldings(developerId: string) {
   for (const h of rows) {
     const acc = accountMap.get(h.accountId)!;
     const key = h.security.tickerSymbol;
+    const oc = h.security.optionContract;
     const entry = byTicker.get(key) ?? {
       ticker_symbol: h.security.tickerSymbol,
       name: h.security.name,
@@ -169,6 +190,20 @@ export async function getPortfolioHoldings(developerId: string) {
       quantity: 0,
       cost_basis: 0,
       market_value: 0,
+      option: oc
+        ? {
+            underlying_ticker: oc.underlying.tickerSymbol,
+            option_type: oc.optionType as "call" | "put",
+            strike: oc.strike,
+            expiry: oc.expiry.toISOString().slice(0, 10),
+            multiplier: oc.multiplier,
+            // Negative when expired (sweep should have cleared the
+            // holding in Phase 2; if it's still here, surface that fact).
+            days_to_expiry: Math.floor(
+              (oc.expiry.getTime() - Date.now()) / 86_400_000,
+            ),
+          }
+        : undefined,
       locations: [],
     };
     entry.quantity += h.quantity;
@@ -241,6 +276,7 @@ export async function getPortfolioHoldings(developerId: string) {
         unrealized_pl: +pl.toFixed(2),
         unrealized_pl_pct: +plPct.toFixed(2),
         weight_pct: totalValue > 0 ? +((e.market_value / totalValue) * 100).toFixed(2) : 0,
+        option: e.option,
         locations: e.locations,
       };
     })
@@ -565,6 +601,14 @@ export async function getPortfolioBySymbol(developerId: string, rawSymbol: strin
 
   const security = await prisma.security.findUnique({
     where: { tickerSymbol: symbol },
+    include: {
+      // Option-aware: when the user clicks an option ticker like
+      // "-AMAT260424C400" the detail page needs to render strike /
+      // expiry / underlying instead of the equity treatment. Include
+      // the underlying so the UI can deep-link back to the parent
+      // stock without an extra round-trip.
+      optionContract: { include: { underlying: true } },
+    },
   });
   if (!security) {
     // Let the caller decide whether to 404 or just show the market-only
@@ -846,6 +890,34 @@ export async function getPortfolioBySymbol(developerId: string, rawSymbol: strin
     };
   });
 
+  // Surface option metadata when this Security IS an option contract.
+  // The UI uses `option != null` as the signal to render an option
+  // detail layout instead of the equity layout.
+  const oc = security.optionContract;
+  const optionPayload = oc
+    ? {
+        underlying_ticker: oc.underlying.tickerSymbol,
+        underlying_name: oc.underlying.name,
+        option_type: oc.optionType as "call" | "put",
+        strike: oc.strike,
+        expiry: oc.expiry.toISOString().slice(0, 10),
+        multiplier: oc.multiplier,
+        days_to_expiry: Math.floor(
+          (oc.expiry.getTime() - Date.now()) / 86_400_000,
+        ),
+        // Greeks land in Phase 3 (Tradier integration). Always present
+        // in the response so the UI doesn't have to guard on missing
+        // keys; null when the refresh job hasn't run yet for this
+        // contract.
+        delta: oc.delta ?? null,
+        gamma: oc.gamma ?? null,
+        theta: oc.theta ?? null,
+        vega: oc.vega ?? null,
+        iv: oc.iv ?? null,
+        greeks_as_of: oc.greeksAsOf ? oc.greeksAsOf.toISOString() : null,
+      }
+    : undefined;
+
   return {
     symbol,
     securityId: security.id,
@@ -853,6 +925,7 @@ export async function getPortfolioBySymbol(developerId: string, rawSymbol: strin
     exchange: security.exchange,
     closePrice: security.closePrice,
     empty: false,
+    option: optionPayload,
     position: {
       sharesHeld: +sharesHeld.toFixed(4),
       avgCostPerShare: +avgCostPerShare.toFixed(4),
