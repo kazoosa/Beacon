@@ -276,13 +276,13 @@ function Hero() {
 function HeroStack() {
   return (
     <div className="relative stripe-stage">
-      {/* Soft violet glow bed */}
+      {/* Soft ink glow bed — matches dashboard's monochrome brand wash */}
       <div
         aria-hidden
         className="absolute -inset-10 opacity-70 pointer-events-none"
         style={{
           background:
-            "radial-gradient(60% 60% at 50% 50%, rgba(99, 91, 255, 0.18), transparent 70%)",
+            "radial-gradient(60% 60% at 50% 50%, rgba(20, 20, 26, 0.14), transparent 70%)",
         }}
       />
 
@@ -396,8 +396,8 @@ function DividendMock() {
               height: `${h}%`,
               background:
                 i >= bars.length - 4
-                  ? "linear-gradient(180deg, #8579ff, #635bff)"
-                  : "rgba(99, 91, 255, 0.18)",
+                  ? "linear-gradient(180deg, #34d399, #059669)"
+                  : "rgba(5, 150, 105, 0.16)",
             }}
           />
         ))}
@@ -411,12 +411,15 @@ function DividendMock() {
 
 function AllocationMock() {
   // Simple conic-gradient donut
+  // Allocation donut palette — pulled from the dashboard's actual data
+  // tokens (--brand ink, --pl-pos emerald, --accent-blue, --accent-amber,
+  // --accent-slate). No purple — same colors the real charts use.
   const segments = [
-    { label: "Tech",       pct: 42, color: "#635bff" },
-    { label: "ETFs",       pct: 28, color: "#8579ff" },
-    { label: "Crypto",     pct: 14, color: "#b0a6ff" },
-    { label: "Healthcare", pct: 10, color: "#d6d1ff" },
-    { label: "Cash",       pct:  6, color: "#ebe8ff" },
+    { label: "Tech",       pct: 42, color: "#14141a" },
+    { label: "ETFs",       pct: 28, color: "#059669" },
+    { label: "Crypto",     pct: 14, color: "#38bdf8" },
+    { label: "Healthcare", pct: 10, color: "#f59e0b" },
+    { label: "Cash",       pct:  6, color: "#64748b" },
   ];
   // Compute conic stops
   let acc = 0;
@@ -749,7 +752,7 @@ function PricingCard({
       <div
         className={`relative h-full rounded-xl p-7 sm:p-8 ${
           accent
-            ? "stripe-gradient-border shadow-[0_24px_48px_-20px_rgba(91,91,214,0.45)]"
+            ? "stripe-gradient-border shadow-[0_24px_48px_-20px_rgba(15,23,42,0.55)]"
             : "border border-white/10"
         } ${comingSoon ? "grayscale opacity-60" : ""}`}
         style={{
@@ -801,7 +804,7 @@ function PricingCard({
         <ul className="mt-5 space-y-2.5 text-[13.5px] text-white/70">
           {tier.features.map((f) => (
             <li key={f} className="flex items-start gap-2.5">
-              <Check className="w-4 h-4 mt-0.5 text-[var(--stripe-accent)] flex-shrink-0" />
+              <Check className="w-4 h-4 mt-0.5 text-[#059669] flex-shrink-0" />
               <span>{f}</span>
             </li>
           ))}
