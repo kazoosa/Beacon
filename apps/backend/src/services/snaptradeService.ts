@@ -161,6 +161,7 @@ export async function syncDeveloper(developer: Developer): Promise<{
     );
 
     for (const acc of accountsForConn) {
+      try {
       const accId = String(acc.id);
       const balance = (acc.balance as { total?: { amount?: number } } | undefined)?.total?.amount ?? 0;
       const accountName = String(acc.name ?? "Brokerage Account");
@@ -202,37 +203,83 @@ export async function syncDeveloper(developer: Developer): Promise<{
       // Remove stale holdings — simplest approach: wipe + recreate per sync
       await prisma.investmentHolding.deleteMany({ where: { accountId: account.id } });
 
+      let holdingsSkipped = 0;
       for (const pos of positions) {
-        const symbol = pos.symbol as
-          | {
-              symbol?: { symbol?: string; description?: string; type?: { description?: string } };
-              price?: number;
-              units?: number;
-              average_purchase_price?: number;
-            }
-          | undefined;
-        const ticker = symbol?.symbol?.symbol ?? String(pos.symbol ?? "").toUpperCase();
-        if (!ticker) continue;
-        const security = await upsertSecurity(ticker, symbol?.symbol?.description ?? ticker, symbol?.price ?? 0, symbol?.symbol?.type?.description);
-        const quantity = Number(pos.units ?? symbol?.units ?? 0);
-        const price = Number(pos.price ?? symbol?.price ?? 0);
-        const avgCost = Number(pos.average_purchase_price ?? symbol?.average_purchase_price ?? price);
+        // SnapTrade's `symbol` field has at least four shapes across
+        // brokers and product lines — older bare strings, the typical
+        // nested {symbol:{symbol,description}}, the deeply nested
+        // {symbol:{symbol:{symbol,description}}}, and the universal
+        // case where only `raw_symbol` carries the ticker. Try them
+        // all before giving up.
+        const { ticker, description, typeDesc, embeddedPrice, embeddedUnits, embeddedAvg } =
+          extractPositionSymbol(pos);
+
+        const quantity = Number(pos.units ?? embeddedUnits ?? 0);
+        const price = Number(pos.price ?? embeddedPrice ?? 0);
+        const avgCost = Number(
+          pos.average_purchase_price ?? embeddedAvg ?? price,
+        );
         const value = quantity * price;
         const costBasis = quantity * avgCost;
 
-        await prisma.investmentHolding.create({
-          data: {
-            accountId: account.id,
-            securityId: security.id,
-            quantity,
-            institutionPrice: price,
-            institutionPriceAsOf: new Date(),
-            institutionValue: value,
-            costBasis,
-            isoCurrencyCode: "USD",
-          },
-        });
-        holdingsCount++;
+        if (!ticker) {
+          // Don't silently drop — log the unrecognised shape so we can
+          // extend extractPositionSymbol for the broker that produced
+          // it. Without this, less-common tickers (e.g. YieldMax ETFs
+          // like ULTY whose symbol object SnapTrade nests differently)
+          // would never appear as holdings even though their dividend
+          // history did.
+          holdingsSkipped++;
+          logger.warn(
+            { accountId: accId, posKeys: Object.keys(pos) },
+            "snaptrade: could not extract ticker from position; skipping",
+          );
+          continue;
+        }
+
+        try {
+          const security = await upsertSecurity(ticker, description, price, typeDesc);
+          // upsert keyed on (accountId, securityId) so a stale row from
+          // a previous partial sync doesn't trigger P2002 and abort.
+          await prisma.investmentHolding.upsert({
+            where: {
+              accountId_securityId: { accountId: account.id, securityId: security.id },
+            },
+            create: {
+              accountId: account.id,
+              securityId: security.id,
+              quantity,
+              institutionPrice: price,
+              institutionPriceAsOf: new Date(),
+              institutionValue: value,
+              costBasis,
+              isoCurrencyCode: "USD",
+            },
+            update: {
+              quantity,
+              institutionPrice: price,
+              institutionPriceAsOf: new Date(),
+              institutionValue: value,
+              costBasis,
+            },
+          });
+          holdingsCount++;
+        } catch (err) {
+          // Per-row failure shouldn't kill the whole sync — the user
+          // sees "Sync failed" but the connection actually completed.
+          // Log and continue so other holdings still land.
+          holdingsSkipped++;
+          logger.warn(
+            { err, accountId: accId, ticker },
+            "snaptrade: failed to upsert holding; continuing",
+          );
+        }
+      }
+      if (holdingsSkipped > 0) {
+        logger.info(
+          { accountId: accId, holdingsSkipped },
+          "snaptrade positions: skipped rows during sync",
+        );
       }
 
       // --- Orders / activities ---
@@ -338,6 +385,17 @@ export async function syncDeveloper(developer: Developer): Promise<{
         logger.info(
           { accountId: accId, skippedUnknown },
           "snaptrade activities skipped (unrecognised type)",
+        );
+      }
+      } catch (err) {
+        // Per-account failure used to bubble out as a 500 even though
+        // the connection had landed and most accounts had synced
+        // successfully. Log the failure so ops can see which account
+        // and broker hit it, but keep going so the user's other
+        // accounts (and the rest of the sync result) still complete.
+        logger.error(
+          { err, accountId: String(acc.id ?? "unknown"), connectionId: connId },
+          "snaptrade: per-account sync failed; continuing with next account",
         );
       }
     }
@@ -486,6 +544,91 @@ function extractSnapTradeSymbol(act: Record<string, unknown>): { ticker: string;
     }
   }
   return { ticker: "CASH", description: "Cash" };
+}
+
+/**
+ * Position-shape symbol extractor. SnapTrade nests this differently
+ * than activities, AND the shape varies per broker. Try every known
+ * path; return ticker="" so the caller logs a warning rather than
+ * defaulting to a junk ticker that would silently land in the DB.
+ *
+ * Known shapes from real responses:
+ *   * pos.symbol = "AAPL"
+ *   * pos.symbol = { symbol: "AAPL", description: "Apple Inc." }
+ *   * pos.symbol = { symbol: { symbol: "AAPL", description: "Apple Inc.",
+ *                              type: { description: "Common Stock" } },
+ *                    price: ..., units: ..., average_purchase_price: ... }
+ *   * pos.symbol = { raw_symbol: "ULTY", description: "..." } — seen on
+ *     YieldMax ETFs and a handful of other newer issues that lack the
+ *     usual normalised symbol wrapper. This was the ULTY case where
+ *     dividends imported but the holding silently got dropped.
+ */
+function extractPositionSymbol(pos: Record<string, unknown>): {
+  ticker: string;
+  description: string;
+  typeDesc?: string;
+  embeddedPrice?: number;
+  embeddedUnits?: number;
+  embeddedAvg?: number;
+} {
+  const raw = pos.symbol;
+  // Bare string at the top level
+  if (typeof raw === "string" && raw.trim()) {
+    const t = raw.trim().toUpperCase();
+    return { ticker: t, description: t };
+  }
+  if (raw && typeof raw === "object") {
+    const level1 = raw as Record<string, unknown>;
+    // pos.symbol.symbol as a bare string (one level of nesting)
+    if (typeof level1.symbol === "string" && level1.symbol.trim()) {
+      return {
+        ticker: String(level1.symbol).trim().toUpperCase(),
+        description:
+          typeof level1.description === "string" && level1.description
+            ? String(level1.description)
+            : String(level1.symbol).trim().toUpperCase(),
+      };
+    }
+    // pos.symbol.raw_symbol — newer SnapTrade shape for ETFs
+    if (typeof level1.raw_symbol === "string" && level1.raw_symbol.trim()) {
+      return {
+        ticker: String(level1.raw_symbol).trim().toUpperCase(),
+        description:
+          typeof level1.description === "string" && level1.description
+            ? String(level1.description)
+            : String(level1.raw_symbol).trim().toUpperCase(),
+      };
+    }
+    // Two-level nesting (the most common modern shape)
+    if (level1.symbol && typeof level1.symbol === "object") {
+      const level2 = level1.symbol as Record<string, unknown>;
+      const ticker =
+        (typeof level2.symbol === "string" && level2.symbol.trim()) ||
+        (typeof level2.raw_symbol === "string" && level2.raw_symbol.trim()) ||
+        "";
+      if (ticker) {
+        const description =
+          typeof level2.description === "string" && level2.description
+            ? String(level2.description)
+            : String(ticker).toUpperCase();
+        const typeObj = level2.type as { description?: string } | undefined;
+        return {
+          ticker: String(ticker).toUpperCase(),
+          description,
+          typeDesc: typeObj?.description,
+          embeddedPrice:
+            typeof level1.price === "number" ? level1.price : undefined,
+          embeddedUnits:
+            typeof level1.units === "number" ? level1.units : undefined,
+          embeddedAvg:
+            typeof level1.average_purchase_price === "number"
+              ? level1.average_purchase_price
+              : undefined,
+        };
+      }
+    }
+  }
+  return { ticker: "", description: "" };
 }
 
 /** `Number(x)` but tolerant of null, undefined, and non-numeric strings. */

@@ -38,7 +38,7 @@ export function StockList({
       <div className="relative mb-1">
         <svg
           aria-hidden
-          className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted pointer-events-none"
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted pointer-events-none"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -51,7 +51,13 @@ export function StockList({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search symbols"
-          className="input w-full text-sm pl-9"
+          className="input w-full text-sm"
+          // .input applies px-3.5 (~14px) via @apply, which loses the
+          // specificity battle with utility .pl-9. Force the left
+          // padding with an inline style so the icon never overlaps
+          // the placeholder or typed value, regardless of utility
+          // ordering.
+          style={{ paddingLeft: "2.25rem" }}
           aria-label="Search stocks"
         />
       </div>

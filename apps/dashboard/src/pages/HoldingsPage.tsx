@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
@@ -36,33 +36,74 @@ export function HoldingsPage() {
   });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sort, setSort] = useState<"value" | "pl" | "weight" | "ticker">("value");
+  const [query, setQuery] = useState("");
 
-  const sorted = [...(q.data?.holdings ?? [])].sort((a, b) => {
-    if (sort === "value") return b.market_value - a.market_value;
-    if (sort === "pl") return b.unrealized_pl_pct - a.unrealized_pl_pct;
-    if (sort === "weight") return b.weight_pct - a.weight_pct;
-    return a.ticker_symbol.localeCompare(b.ticker_symbol);
-  });
+  const trimmedQuery = query.trim().toUpperCase();
+
+  const sorted = useMemo(() => {
+    const all = q.data?.holdings ?? [];
+    const matches = trimmedQuery
+      ? all.filter(
+          (h) =>
+            h.ticker_symbol.toUpperCase().includes(trimmedQuery) ||
+            h.name.toUpperCase().includes(trimmedQuery),
+        )
+      : all;
+    return [...matches].sort((a, b) => {
+      if (sort === "value") return b.market_value - a.market_value;
+      if (sort === "pl") return b.unrealized_pl_pct - a.unrealized_pl_pct;
+      if (sort === "weight") return b.weight_pct - a.weight_pct;
+      return a.ticker_symbol.localeCompare(b.ticker_symbol);
+    });
+  }, [q.data, trimmedQuery, sort]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-fg-primary">Holdings</h1>
           <p className="text-xs text-fg-muted mt-1">
             {q.data?.holdings.length ?? 0} positions · Consolidated across all connected brokerages
+            {trimmedQuery && (
+              <span className="ml-1 text-fg-fainter">
+                · {sorted.length} match{sorted.length === 1 ? "" : "es"}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex gap-1 text-xs">
-          {(["value", "pl", "weight", "ticker"] as const).map((k) => (
-            <button
-              key={k}
-              className={`btn-ghost ${sort === k ? "bg-bg-hover text-fg-primary" : ""}`}
-              onClick={() => setSort(k)}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <svg
+              aria-hidden
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted pointer-events-none"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
             >
-              {k === "ticker" ? "A–Z" : k === "pl" ? "P/L %" : k === "weight" ? "Weight" : "Value"}
-            </button>
-          ))}
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search holdings"
+              className="input text-sm w-44"
+              style={{ paddingLeft: "2.25rem" }}
+              aria-label="Search holdings"
+            />
+          </div>
+          <div className="flex gap-1 text-xs">
+            {(["value", "pl", "weight", "ticker"] as const).map((k) => (
+              <button
+                key={k}
+                className={`btn-ghost ${sort === k ? "bg-bg-hover text-fg-primary" : ""}`}
+                onClick={() => setSort(k)}
+              >
+                {k === "ticker" ? "A–Z" : k === "pl" ? "P/L %" : k === "weight" ? "Weight" : "Value"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -174,7 +215,9 @@ export function HoldingsPage() {
             {q.isSuccess && sorted.length === 0 && (
               <tr>
                 <td colSpan={9} className="text-center text-fg-muted py-10">
-                  No holdings yet. Connect a brokerage to get started.
+                  {trimmedQuery
+                    ? `No holdings match "${query}".`
+                    : "No holdings yet. Connect a brokerage to get started."}
                 </td>
               </tr>
             )}

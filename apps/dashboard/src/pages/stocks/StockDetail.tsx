@@ -1131,10 +1131,17 @@ function HeadlinesPanel({ news }: { news: UseQueryResult<NewsResponse> }) {
       ) : news.isError ? (
         <EmptyState message="Headlines unavailable right now." />
       ) : items.length === 0 ? (
+        // Headlines come from a third-party news provider keyed on
+        // ticker. Coverage is uneven by design — newer ETFs (YieldMax,
+        // covered-call ETFs), options-strategy products, foreign ADRs,
+        // and some preferred-share classes simply aren't indexed. Be
+        // honest about this rather than implying the feature is
+        // broken or "coming soon".
         <div className="text-center text-xs text-fg-muted py-6 rounded border border-dashed border-border-subtle">
-          <div className="mb-1">Live news feed coming soon.</div>
+          <div className="mb-1">No headlines for this symbol.</div>
           <div className="text-[10px] text-fg-fainter">
-            Quotes stream live; headlines need a separate provider.
+            Coverage varies — some newer ETFs and options products
+            aren't indexed by our news provider.
           </div>
         </div>
       ) : (
