@@ -16,9 +16,27 @@ import { StockDetail } from "./StockDetail";
  * aggregate. Selection is URL-addressable via `?symbol=AAPL` so the
  * Transactions page can deep-link rows directly into a stock.
  */
+const COLLAPSE_KEY = "beacon.stocks.listCollapsed";
+
 export function StocksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [range, setRange] = useState<HistoryRange>("1mo");
+  // Persist collapse across reloads. Read synchronously so first paint
+  // already reflects the user's last preference (no flash).
+  const [listCollapsed, setListCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, listCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [listCollapsed]);
 
   // Held tickers from existing portfolio endpoint — dedupe against
   // the static watchlist and order by value first so the user's own
@@ -95,14 +113,45 @@ export function StocksPage() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 md:gap-6 -m-4 md:-m-6 p-4 md:p-6 min-h-full">
-      <aside className="md:sticky md:top-0 md:self-start md:max-h-[calc(100vh-3rem)] md:overflow-y-auto">
-        <StockList
-          symbols={symbolList}
-          selected={selected}
-          onSelect={selectSymbol}
-        />
-      </aside>
+    <div
+      className={`grid grid-cols-1 ${
+        listCollapsed ? "md:grid-cols-1" : "md:grid-cols-[320px_1fr]"
+      } gap-4 md:gap-6 -m-4 md:-m-6 p-4 md:p-6 min-h-full relative`}
+    >
+      {!listCollapsed && (
+        <aside className="md:sticky md:top-0 md:self-start md:max-h-[calc(100vh-3rem)] md:overflow-y-auto">
+          <div className="flex items-center justify-end mb-2">
+            <button
+              type="button"
+              onClick={() => setListCollapsed(true)}
+              className="text-fg-muted hover:text-fg-primary text-xs px-1.5 py-1 rounded hover:bg-bg-hover transition-colors"
+              title="Collapse symbol list"
+              aria-label="Collapse symbol list"
+            >
+              ‹
+            </button>
+          </div>
+          <StockList
+            symbols={symbolList}
+            selected={selected}
+            onSelect={selectSymbol}
+          />
+        </aside>
+      )}
+      {listCollapsed && (
+        <button
+          type="button"
+          onClick={() => setListCollapsed(false)}
+          className="hidden md:flex fixed left-0 top-1/2 -translate-y-1/2 z-30 items-center gap-1 px-1.5 py-3 rounded-r-md border border-l-0 border-border-subtle bg-bg-elevated text-fg-secondary hover:text-fg-primary hover:bg-bg-hover transition-colors"
+          title="Show symbol list"
+          aria-label="Show symbol list"
+        >
+          <span className="text-xs">›</span>
+          <span className="text-[10px] uppercase tracking-widest [writing-mode:vertical-rl]">
+            Symbols
+          </span>
+        </button>
+      )}
       <main>
         <StockDetail
           symbol={selected}
