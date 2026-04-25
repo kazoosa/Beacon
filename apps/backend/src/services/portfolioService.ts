@@ -3,6 +3,218 @@
  * Consumer portfolio app queries these.
  */
 import { prisma } from "../db.js";
+import { nanoid } from "nanoid";
+import { parseOptionSymbol } from "./optionSymbolParser.js";
+import { upsertSecurityWithTx } from "./csvImportService.js";
+import { recomputeHoldingsForAccount } from "./holdingsRecompute.js";
+
+export type ManualTxType =
+  | "buy"
+  | "sell"
+  | "dividend"
+  | "dividend_reinvested"
+  | "interest"
+  | "fee"
+  | "transfer";
+
+export interface AddManualTransactionInput {
+  accountId: string;
+  ticker: string;
+  date: string; // YYYY-MM-DD
+  type: ManualTxType;
+  quantity: number;
+  price: number;
+  fees?: number;
+  notes?: string;
+}
+
+export class ManualTxError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Insert a user-entered InvestmentTransaction and recompute the
+ * affected account's holdings + cash balance so the rest of the app
+ * stays consistent with the ledger. Authorization: the accountId must
+ * belong to one of the developer's items, otherwise 403.
+ */
+export async function addManualTransaction(
+  developerId: string,
+  input: AddManualTransactionInput,
+): Promise<{
+  id: string;
+  date: string;
+  type: string;
+  ticker_symbol: string;
+  security_name: string;
+  quantity: number;
+  price: number;
+  amount: number;
+  fees: number;
+  institution: string;
+  institution_color: string;
+  account_name: string;
+  holdings_recomputed: number;
+}> {
+  const itemIds = await getUserItemIds(developerId);
+  if (itemIds.length === 0) {
+    throw new ManualTxError("No connected accounts", 403);
+  }
+
+  const account = await prisma.account.findFirst({
+    where: { id: input.accountId, itemId: { in: itemIds } },
+    include: { item: { include: { institution: true } } },
+  });
+  if (!account) {
+    throw new ManualTxError("Account not found or not owned by you", 403);
+  }
+
+  const ticker = input.ticker.trim().toUpperCase();
+  const fees = Number(input.fees ?? 0);
+  const qty = Number(input.quantity);
+  const price = Number(input.price);
+
+  // Compute amount sign-correctly server-side. Buys debit cash, sells
+  // and dividends credit it. Cash-only types (interest, fee, transfer)
+  // use price as the dollar amount and ignore quantity.
+  const amount = (() => {
+    switch (input.type) {
+      case "buy":
+        return -(qty * price + fees);
+      case "sell":
+        return qty * price - fees;
+      case "dividend":
+      case "dividend_reinvested":
+        return qty * price;
+      case "interest":
+      case "transfer":
+        return price;
+      case "fee":
+        return -price;
+    }
+  })();
+
+  // For cash-only types we still need a security to satisfy the FK.
+  // Use a synthetic CASH ticker as the carrier — same convention the
+  // existing seeded data uses for interest/fee rows.
+  const carrierTicker = ["interest", "fee", "transfer"].includes(input.type)
+    ? "CASH"
+    : ticker;
+
+  const optionMeta = parseOptionSymbol(carrierTicker) ?? undefined;
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const security = await upsertSecurityWithTx(tx, {
+        ticker: carrierTicker,
+        name: optionMeta ? carrierTicker : carrierTicker === "CASH" ? "Cash" : ticker,
+        quantity: 0,
+        price,
+        option: optionMeta,
+      });
+
+      // Deterministic prefix + nanoid suffix. Suffix lets a user
+      // legitimately add the exact same trade twice (rare but possible)
+      // while still using the snaptradeOrderId unique column for
+      // audit-trail consistency.
+      const externalId =
+        `manual_${input.accountId}_${input.date}_${carrierTicker}_${qty}_${price}_${nanoid(6)}`;
+
+      const created = await tx.investmentTransaction.create({
+        data: {
+          accountId: account.id,
+          securityId: security.id,
+          snaptradeOrderId: externalId,
+          date: new Date(`${input.date}T00:00:00.000Z`),
+          name: input.notes?.trim() || `${input.type} ${ticker}`,
+          type: input.type,
+          quantity: qty,
+          price,
+          amount,
+          fees,
+          isoCurrencyCode: "USD",
+        },
+      });
+
+      const recompute = await recomputeHoldingsForAccount(account.id, tx);
+
+      return { created, security, recompute };
+    },
+    { timeout: 15_000, maxWait: 5_000 },
+  );
+
+  return {
+    id: result.created.id,
+    date: result.created.date.toISOString().slice(0, 10),
+    type: result.created.type,
+    ticker_symbol: result.security.tickerSymbol,
+    security_name: result.security.name,
+    quantity: result.created.quantity,
+    price: result.created.price,
+    amount: result.created.amount,
+    fees: result.created.fees,
+    institution: account.item.institution.name,
+    institution_color: account.item.institution.primaryColor,
+    account_name: account.name,
+    holdings_recomputed: result.recompute.holdingsWritten,
+  };
+}
+
+/**
+ * Delete a single InvestmentTransaction by id, then recompute holdings
+ * for the affected account so the Holdings/Allocation/Stock-detail
+ * pages stay consistent. Authorized: the transaction's account must
+ * belong to the developer.
+ */
+export async function deleteTransaction(
+  developerId: string,
+  txId: string,
+): Promise<{
+  deleted: { id: string; type: string; ticker_symbol: string };
+  holdings_recomputed: number;
+}> {
+  const itemIds = await getUserItemIds(developerId);
+  if (itemIds.length === 0) {
+    throw new ManualTxError("No connected accounts", 403);
+  }
+
+  const tx = await prisma.investmentTransaction.findUnique({
+    where: { id: txId },
+    include: {
+      security: true,
+      account: { select: { id: true, itemId: true } },
+    },
+  });
+  if (!tx) {
+    throw new ManualTxError("Transaction not found", 404);
+  }
+  if (!itemIds.includes(tx.account.itemId)) {
+    throw new ManualTxError("Transaction not owned by you", 403);
+  }
+
+  const result = await prisma.$transaction(
+    async (client) => {
+      await client.investmentTransaction.delete({ where: { id: txId } });
+      const recompute = await recomputeHoldingsForAccount(tx.account.id, client);
+      return recompute;
+    },
+    { timeout: 15_000, maxWait: 5_000 },
+  );
+
+  return {
+    deleted: {
+      id: tx.id,
+      type: tx.type,
+      ticker_symbol: tx.security.tickerSymbol,
+    },
+    holdings_recomputed: result.holdingsWritten,
+  };
+}
 
 async function getUserItemIds(developerId: string): Promise<string[]> {
   const apps = await prisma.application.findMany({
@@ -330,6 +542,10 @@ export async function getPortfolioTransactions(
     const acc = accountMap.get(t.accountId)!;
     return {
       id: t.id,
+      // account_id surfaced so the dashboard's undo-delete flow can
+      // re-create a transaction on the same account without an extra
+      // round-trip to look it up.
+      account_id: t.accountId,
       date: t.date.toISOString().slice(0, 10),
       type: t.type,
       ticker_symbol: t.security.tickerSymbol,

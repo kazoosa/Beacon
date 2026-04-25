@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireDeveloper } from "../middleware/authJwt.js";
+import { z } from "zod";
 import {
   getPortfolioSummary,
   getPortfolioHoldings,
@@ -9,6 +10,9 @@ import {
   getConnectedAccounts,
   getPortfolioBySymbol,
   ensureUserApplicationAndLinkToken,
+  addManualTransaction,
+  deleteTransaction,
+  ManualTxError,
 } from "../services/portfolioService.js";
 import { prisma } from "../db.js";
 import { Errors } from "../utils/errors.js";
@@ -97,6 +101,62 @@ router.get("/transactions", async (req, res, next) => {
     const offset = Number(req.query.offset ?? 0);
     res.json(await getPortfolioTransactions(req.developerId!, { type, ticker, count, offset }));
   } catch (e) {
+    next(e);
+  }
+});
+
+const ManualTxSchema = z.object({
+  accountId: z.string().min(1),
+  ticker: z
+    .string()
+    .min(1)
+    .max(40)
+    .transform((s) => s.trim().toUpperCase()),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
+  type: z.enum([
+    "buy",
+    "sell",
+    "dividend",
+    "dividend_reinvested",
+    "interest",
+    "fee",
+    "transfer",
+  ]),
+  quantity: z.number().nonnegative(),
+  price: z.number().nonnegative(),
+  fees: z.number().nonnegative().default(0),
+  notes: z.string().max(500).optional(),
+});
+
+router.post("/transactions/manual", async (req, res, next) => {
+  try {
+    const parsed = ManualTxSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "VALIDATION_FAILED",
+        issues: parsed.error.flatten().fieldErrors,
+      });
+    }
+    const tx = await addManualTransaction(req.developerId!, parsed.data);
+    res.json({ transaction: tx });
+  } catch (e) {
+    if (e instanceof ManualTxError) {
+      return res.status(e.status).json({ error: "MANUAL_TX_REJECTED", message: e.message });
+    }
+    next(e);
+  }
+});
+
+router.delete("/transactions/:id", async (req, res, next) => {
+  try {
+    const result = await deleteTransaction(req.developerId!, req.params.id);
+    res.json(result);
+  } catch (e) {
+    if (e instanceof ManualTxError) {
+      return res.status(e.status).json({ error: "DELETE_REJECTED", message: e.message });
+    }
     next(e);
   }
 });

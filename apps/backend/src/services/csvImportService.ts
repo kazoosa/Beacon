@@ -26,7 +26,7 @@ export type Broker =
 export type CsvKind = "positions" | "activity";
 export type { ActivityType };
 
-interface ParsedPosition {
+export interface ParsedPosition {
   ticker: string;
   name: string;
   quantity: number;
@@ -1573,13 +1573,13 @@ async function ensureInternalApplication(developer: Developer) {
   });
 }
 
-type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+export type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 async function upsertSecurity(pos: ParsedPosition) {
   return upsertSecurityWithTx(prisma, pos);
 }
 
-async function upsertSecurityWithTx(
+export async function upsertSecurityWithTx(
   tx: PrismaTx | typeof prisma,
   pos: ParsedPosition,
 ) {
