@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { useChartTheme, tooltipProps } from "../lib/chartTheme";
 import { TickerAvatar } from "./stocks/StockDetail";
 import { useTo } from "../lib/basePath";
+import { Skeleton } from "../components/Skeleton";
 import {
   AreaChart,
   Area,
@@ -83,7 +84,13 @@ export function OverviewPage() {
           <div>
             <div className="text-xs text-fg-muted uppercase tracking-wider mb-1">Portfolio value</div>
             <div className="font-num text-4xl font-semibold text-fg-primary">
-              {s ? fmtUsd(s.total_value) : "—"}
+              {summary.isLoading ? (
+                <Skeleton className="h-10 w-48" />
+              ) : s ? (
+                fmtUsd(s.total_value)
+              ) : (
+                "—"
+              )}
             </div>
             {s && !empty && (
               <div className="mt-2 flex items-center gap-3">
@@ -141,6 +148,23 @@ export function OverviewPage() {
                 </Link>
               </div>
               <div className="space-y-2">
+                {holdings.isLoading &&
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div
+                      key={`sk-${i}`}
+                      className="flex items-center gap-3 py-2 px-2"
+                    >
+                      <Skeleton className="w-9 h-9 rounded-full" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-2.5 w-32" />
+                      </div>
+                      <div className="space-y-1.5 text-right">
+                        <Skeleton className="h-3 w-16 ml-auto" />
+                        <Skeleton className="h-2.5 w-10 ml-auto" />
+                      </div>
+                    </div>
+                  ))}
                 {holdings.data?.holdings.slice(0, 6).map((h) => (
                   <Link
                     key={h.ticker_symbol}
@@ -179,10 +203,19 @@ export function OverviewPage() {
                 </Link>
               </div>
               <div className="font-num text-2xl text-fg-primary">
-                {divs.data ? fmtUsd(divs.data.ytd_total) : "—"}
+                {divs.isLoading ? (
+                  <Skeleton className="h-7 w-24" />
+                ) : divs.data ? (
+                  fmtUsd(divs.data.ytd_total)
+                ) : (
+                  "—"
+                )}
               </div>
               <div className="text-xs text-fg-muted mb-4">year to date</div>
               <div className="h-40">
+                {divs.isLoading ? (
+                  <Skeleton className="h-full w-full" />
+                ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={divs.data?.by_month ?? []}>
                     <XAxis
@@ -199,6 +232,7 @@ export function OverviewPage() {
                     <Bar dataKey="amount" fill="#10b981" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </div>
           </div>
@@ -223,6 +257,23 @@ export function OverviewPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {tx.isLoading &&
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={`sk-${i}`}>
+                        <td><Skeleton className="h-3 w-20" /></td>
+                        <td><Skeleton className="h-4 w-12" /></td>
+                        <td><Skeleton className="h-3 w-14" /></td>
+                        <td><Skeleton className="h-4 w-24" /></td>
+                        <td className="text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
+                      </tr>
+                    ))}
+                  {tx.isSuccess && (tx.data?.transactions.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center text-fg-muted py-6 text-xs">
+                        No activity yet.
+                      </td>
+                    </tr>
+                  )}
                   {tx.data?.transactions.slice(0, 7).map((t) => (
                     <tr key={t.id}>
                       <td className="text-xs text-fg-secondary font-num">{t.date}</td>

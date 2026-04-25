@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd, fmtPct } from "../components/money";
+import { Skeleton } from "../components/Skeleton";
 
 interface Holding {
   ticker_symbol: string;
@@ -365,6 +366,27 @@ export function HoldingsPage() {
                 </>
               );
             })}
+            {q.isLoading &&
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={`sk-${i}`}>
+                  <td><Skeleton className="h-3 w-3" /></td>
+                  <td><Skeleton className="h-4 w-14" /></td>
+                  <td><Skeleton className="h-4 w-40" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                  <td className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                </tr>
+              ))}
+            {q.isError && (
+              <tr>
+                <td colSpan={9} className="text-center text-rose-400 py-10">
+                  Couldn't load holdings — {(q.error as Error).message}
+                </td>
+              </tr>
+            )}
             {q.isSuccess && sorted.length === 0 && (
               <tr>
                 <td colSpan={9} className="text-center text-fg-muted py-10">
