@@ -11,6 +11,8 @@ const configSchema = z.object({
   SNAPTRADE_CLIENT_ID: z.string().optional().default(""),
   SNAPTRADE_CONSUMER_KEY: z.string().optional().default(""),
   SNAPTRADE_WEBHOOK_SECRET: z.string().optional().default(""),
+  RESEND_API_KEY: z.string().optional().default(""),
+  CONTACT_EMAIL_TO: z.string().optional().default("kazoosa8@gmail.com"),
   PORT: z.coerce.number().default(3001),
   DASHBOARD_URL: z.string().url().default("http://localhost:5174"),
   LINK_UI_URL: z.string().url().default("http://localhost:5175"),
