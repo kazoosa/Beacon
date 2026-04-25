@@ -14,6 +14,10 @@ interface Props {
   subtitle?: string;
   status?: Status;
   hero?: string;
+  /** Small line under the hero — preferred over the old "Working/Running"
+   *  filler text. Use it for the kind of context the user actually wants
+   *  ("3/3 live · last deploy 3h ago" beats "All live"). */
+  heroSub?: string;
   metrics?: Metric[];
   progress?: { value: number; label?: string };
   link?: string;
@@ -33,6 +37,7 @@ export function InfraCard({
   subtitle,
   status = "unconfigured",
   hero,
+  heroSub,
   metrics,
   progress,
   link,
@@ -52,7 +57,12 @@ export function InfraCard({
         <span className={`pill ${p.cls}`}>{p.label}</span>
       </div>
 
-      {hero && <div className="infra-hero">{hero}</div>}
+      {hero && (
+        <div>
+          <div className="infra-hero">{hero}</div>
+          {heroSub && <div className="infra-hero-sub">{heroSub}</div>}
+        </div>
+      )}
 
       {progress && (
         <div className="infra-progress-wrap">

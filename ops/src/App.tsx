@@ -33,6 +33,8 @@ type ServiceData = {
 
 const AUTH_KEY = "beacon_ops_auth";
 const THEME_KEY = "beacon_ops_theme";
+const CACHE_KEY = "beacon_ops_data";
+const CACHE_TTL_MS = 5 * 60_000; // serve cached payload up to 5 min old on mount
 const REFRESH_MS = 30_000;
 
 function getInitialTheme(): "light" | "dark" {
@@ -57,10 +59,35 @@ export function App() {
   );
   const [loginValue, setLoginValue] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [data, setData] = useState<OpsPayload | null>(null);
+  // Hydrate from localStorage synchronously so the first paint after a
+  // reload shows the prior payload immediately while the fresh fetch
+  // is in flight. Biggest perceived-performance win on the page.
+  const [data, setData] = useState<OpsPayload | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+      const { data: d, ts } = JSON.parse(cached) as {
+        data: OpsPayload;
+        ts: number;
+      };
+      if (typeof ts !== "number" || Date.now() - ts > CACHE_TTL_MS) return null;
+      return d;
+    } catch {
+      return null;
+    }
+  });
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [lastFetched, setLastFetched] = useState<Date | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+      const { ts } = JSON.parse(cached) as { ts: number };
+      return typeof ts === "number" ? new Date(ts) : null;
+    } catch {
+      return null;
+    }
+  });
   const [theme, setTheme] = useState<"light" | "dark">(() => getInitialTheme());
 
   useEffect(() => {
@@ -90,7 +117,16 @@ export function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = (await res.json()) as OpsPayload;
       setData(payload);
-      setLastFetched(new Date());
+      const now = new Date();
+      setLastFetched(now);
+      try {
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({ data: payload, ts: now.getTime() }),
+        );
+      } catch {
+        /* ignore quota errors */
+      }
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -127,6 +163,7 @@ export function App() {
 
   function signOut() {
     localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(CACHE_KEY);
     setPassword("");
     setAuthed(false);
     setData(null);
@@ -202,6 +239,8 @@ export function App() {
 
       {err && <div className="error">{err}</div>}
 
+      {!s && loading && <FirstLoadSkeleton />}
+
       {s && (
         <>
           <StatusBanner status={overallStatus} services={s} />
@@ -216,15 +255,15 @@ export function App() {
               title="Beacon App"
               subtitle="Users can sign in and use it"
               status={s.health?.status}
-              hero={s.health?.data?.ok ? "Working" : "Down"}
+              hero={
+                s.health?.data?.latencyMs
+                  ? `${s.health.data.latencyMs} ms`
+                  : s.health?.data?.ok
+                    ? "Healthy"
+                    : "Down"
+              }
+              heroSub={`${speedLabel(s.health?.data?.latencyMs as number | undefined)} response`}
               metrics={[
-                {
-                  label: "Response speed",
-                  value: speedLabel(s.health?.data?.latencyMs as number | undefined),
-                  sub: s.health?.data?.latencyMs
-                    ? `${s.health.data.latencyMs} ms`
-                    : undefined,
-                },
                 {
                   label: "Environment",
                   value: String(s.health?.data?.environment ?? "—"),
@@ -239,13 +278,12 @@ export function App() {
               title="Backend server"
               subtitle="Login, data, brokerage sync"
               status={s.render?.status}
-              hero={renderHero(s.render)}
+              hero={String(s.render?.data?.["last deploy"] ?? renderHero(s.render))}
+              heroSub={
+                String(s.render?.data?.["last change"] ?? "")
+                || `${renderHero(s.render).toLowerCase()} on Render`
+              }
               metrics={[
-                {
-                  label: "Last update",
-                  value: String(s.render?.data?.["last deploy"] ?? "—"),
-                  sub: String(s.render?.data?.["last change"] ?? ""),
-                },
                 {
                   label: "Region",
                   value: String(s.render?.data?.region ?? "—"),
@@ -261,6 +299,7 @@ export function App() {
               subtitle="What your users see"
               status={s.vercel?.status}
               hero={vercelHero(s.vercel)}
+              heroSub="Last deploy synced"
               metrics={vercelMetrics(s.vercel)}
               link="https://vercel.com/dashboard"
               linkLabel="Vercel"
@@ -394,6 +433,28 @@ export function App() {
 }
 
 /* ---------------------------------------- helpers */
+
+function FirstLoadSkeleton() {
+  // Shown only on the very first visit (no cached payload). Returning
+  // visitors hydrate immediately from localStorage and never see this.
+  return (
+    <div className="first-load-skel" aria-hidden>
+      <div className="skel skel-banner" />
+      <div className="skel skel-section-head" />
+      <div className="skel-grid skel-grid-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skel skel-kpi" />
+        ))}
+      </div>
+      <div className="skel skel-section-head" />
+      <div className="skel-grid skel-grid-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="skel skel-infra" />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function SectionHeader({
   icon,

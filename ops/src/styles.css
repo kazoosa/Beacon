@@ -180,25 +180,74 @@ svg { display: block; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
+/* ─────────────── First-load skeletons ─────────────── */
+.first-load-skel { display: flex; flex-direction: column; gap: 14px; }
+.skel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+.skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 100%
+  );
+  animation: skel-shimmer 1.4s linear infinite;
+}
+:root .skel::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(17, 17, 27, 0.04) 50%,
+    transparent 100%
+  );
+}
+@keyframes skel-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.skel-banner { height: 80px; }
+.skel-section-head { height: 32px; border: none; background: transparent; margin-top: 16px; }
+.skel-section-head::after { display: none; }
+.skel-grid { display: grid; gap: 12px; }
+.skel-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.skel-grid-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.skel-kpi { height: 108px; }
+.skel-infra { height: 240px; }
+
 /* ─────────────── Banner ─────────────── */
 
 .banner {
   border-radius: var(--radius);
-  padding: 18px 22px;
-  margin-bottom: 32px;
+  padding: 20px 22px 20px 26px;
+  margin-bottom: 36px;
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-card);
 }
+/* Solid color band on the left edge — hits the eye before the icon
+   does and gives the banner real visual weight without being loud. */
 .banner::before {
   content: "";
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
   pointer-events: none;
 }
+.banner-ok::before { background: var(--green); }
+.banner-warn::before { background: var(--amber); }
+.banner-error::before { background: var(--red); }
+.banner-unconfigured::before { background: var(--fg-fainter); }
 .banner-ok {
   background: linear-gradient(180deg, rgba(52, 211, 153, 0.06), rgba(52, 211, 153, 0.02));
   border-color: rgba(52, 211, 153, 0.2);
@@ -227,8 +276,8 @@ svg { display: block; }
 .banner-error .banner-icon { background: rgba(248, 113, 113, 0.14); color: var(--red); }
 .banner-unconfigured .banner-icon { background: rgba(255, 255, 255, 0.04); color: var(--fg-muted); }
 
-.banner-title { font-size: 16px; font-weight: 600; color: var(--fg); letter-spacing: -0.01em; }
-.banner-sub { font-size: 12.5px; color: var(--fg-muted); margin-top: 2px; }
+.banner-title { font-size: 17px; font-weight: 600; color: var(--fg); letter-spacing: -0.015em; }
+.banner-sub { font-size: 12.5px; color: var(--fg-muted); margin-top: 3px; }
 
 /* ─────────────── Section header ─────────────── */
 
@@ -236,7 +285,16 @@ svg { display: block; }
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 28px 0 14px;
+  margin: 36px 0 14px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+/* The first section-head after the banner doesn't need a top border
+   — there's already a banner above it providing visual separation. */
+.banner + .section-head {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 .section-icon {
   width: 32px;
@@ -264,11 +322,15 @@ svg { display: block; }
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 16px 18px;
   position: relative;
   overflow: hidden;
   transition: all 160ms ease;
   box-shadow: var(--shadow-card);
+  min-height: 108px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 html.dark .kpi-card { background: linear-gradient(180deg, #16161f, #11111a); }
 .kpi-card:hover { border-color: var(--border-strong); }
@@ -287,11 +349,11 @@ html.dark .kpi-card { background: linear-gradient(180deg, #16161f, #11111a); }
   align-items: center;
   gap: 8px;
   color: var(--fg-muted);
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 10px;
+  letter-spacing: 0.1em;
+  margin-bottom: 0;
 }
 .kpi-icon {
   width: 22px;
@@ -307,18 +369,22 @@ html.dark .kpi-card { background: linear-gradient(180deg, #16161f, #11111a); }
 .kpi-label { flex: 1; }
 
 .kpi-value {
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 600;
   color: var(--fg);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  margin-top: 6px;
 }
 
 .kpi-trend {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--fg-muted);
-  margin-top: 8px;
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .kpi-positive .kpi-trend { color: var(--green); }
 
@@ -396,14 +462,22 @@ html.dark .kpi-card { background: linear-gradient(180deg, #16161f, #11111a); }
 }
 
 .infra-hero {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--fg);
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  margin-bottom: 16px;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
+.infra-hero-sub {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  margin-top: 3px;
+  margin-bottom: 14px;
+}
+.infra-hero + .infra-progress-wrap,
+.infra-hero-sub + .infra-progress-wrap,
+div + .infra-progress-wrap { margin-top: 14px; }
 
 .infra-progress-wrap { margin-bottom: 16px; }
 .infra-progress {
@@ -492,17 +566,27 @@ html.dark .kpi-card { background: linear-gradient(180deg, #16161f, #11111a); }
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   border: 1px solid transparent;
 }
-.pill-ok { background: rgba(52, 211, 153, 0.1); color: var(--green); border-color: rgba(52, 211, 153, 0.22); }
-.pill-warn { background: rgba(251, 191, 36, 0.1); color: var(--amber); border-color: rgba(251, 191, 36, 0.22); }
-.pill-error { background: rgba(248, 113, 113, 0.1); color: var(--red); border-color: rgba(248, 113, 113, 0.22); }
+/* Leading dot — pure-color glance signal independent of the label text. */
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.pill-ok { background: rgba(52, 211, 153, 0.12); color: var(--green); border-color: rgba(52, 211, 153, 0.28); }
+.pill-warn { background: rgba(251, 191, 36, 0.12); color: var(--amber); border-color: rgba(251, 191, 36, 0.28); }
+.pill-error { background: rgba(248, 113, 113, 0.12); color: var(--red); border-color: rgba(248, 113, 113, 0.3); }
 .pill-gray { background: rgba(255, 255, 255, 0.04); color: var(--fg-muted); border-color: var(--border); }
 
 /* ─────────────── Activity ─────────────── */
