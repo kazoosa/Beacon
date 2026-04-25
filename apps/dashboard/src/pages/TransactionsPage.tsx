@@ -1,13 +1,16 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { fmtUsd } from "../components/money";
 import { useTo } from "../lib/basePath";
+import { AddTransactionModal } from "../components/AddTransactionModal";
+import { useToast } from "../components/Toast";
 
 interface Tx {
   id: string;
+  account_id: string;
   date: string;
   type: string;
   ticker_symbol: string;
@@ -15,6 +18,7 @@ interface Tx {
   quantity: number;
   price: number;
   amount: number;
+  fees?: number;
   institution: string;
   institution_color: string;
   account_name: string;
@@ -29,6 +33,7 @@ export function TransactionsPage() {
   const [type, setType] = useState<(typeof TYPES)[number]>("all");
   const [ticker, setTicker] = useState("");
   const [inst, setInst] = useState<string>("all");
+  const [addOpen, setAddOpen] = useState(false);
 
   const q = useQuery({
     queryKey: ["tx", type, ticker],
@@ -66,7 +71,16 @@ export function TransactionsPage() {
           <h1 className="text-xl font-semibold text-fg-primary">Transactions</h1>
           <p className="text-xs text-fg-muted mt-1">{rows.length} transactions</p>
         </div>
+        <button
+          type="button"
+          className="btn-primary text-xs"
+          onClick={() => setAddOpen(true)}
+        >
+          + Add transaction
+        </button>
       </div>
+
+      <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SummaryCard label="Buys (shown)" value={summary.buy ?? 0} />
@@ -144,6 +158,7 @@ export function TransactionsPage() {
               <th className="text-right">Qty</th>
               <th className="text-right">Price</th>
               <th className="text-right">Amount</th>
+              <th className="w-8"></th>
             </tr>
           </thead>
           <tbody>
@@ -192,11 +207,14 @@ export function TransactionsPage() {
                     <span className="text-fg-secondary">{fmtUsd(t.amount)}</span>
                   )}
                 </td>
+                <td className="text-right">
+                  <DeleteTxButton tx={t} />
+                </td>
               </tr>
             ))}
             {rows.length === 0 && !q.isLoading && !q.isError && (
               <tr>
-                <td colSpan={7} className="py-10 text-center">
+                <td colSpan={8} className="py-10 text-center">
                   {(q.data?.transactions.length ?? 0) === 0 ? (
                     <div className="space-y-2">
                       <div className="text-sm text-fg-primary font-medium">
@@ -225,7 +243,7 @@ export function TransactionsPage() {
             )}
             {q.isLoading && (
               <tr>
-                <td colSpan={7} className="text-center text-fg-muted py-10">
+                <td colSpan={8} className="text-center text-fg-muted py-10">
                   Loading transactions…
                 </td>
               </tr>
@@ -258,4 +276,106 @@ function TxBadge({ type }: { type: string }) {
     fee: "badge-red",
   };
   return <span className={map[type] ?? "badge-gray"}>{type.toUpperCase()}</span>;
+}
+
+/**
+ * Delete affordance per row. One click → toast with Undo.
+ *
+ * Flow:
+ *   1. User clicks ×
+ *   2. We snapshot the row, optimistically remove it (via cache
+ *      invalidate), and call DELETE on the server.
+ *   3. Show a 10-second toast: "Transaction deleted. Undo".
+ *   4a. If user clicks Undo, POST manual-add with the snapshot →
+ *       row reappears (with a new id, but identical fields).
+ *   4b. If the toast times out, the delete is committed; we don't
+ *       store the snapshot beyond that.
+ *
+ * Note: the restored transaction has a *new* id. From the user's
+ * perspective the row is back; from a database-audit perspective the
+ * original id is gone. Acceptable for v1 — see "Approach A" in plan.
+ */
+function DeleteTxButton({ tx }: { tx: Tx }) {
+  const { accessToken } = useAuth();
+  const f = apiFetch(() => accessToken);
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const del = useMutation({
+    mutationFn: () =>
+      f<{ deleted: { id: string }; holdings_recomputed: number }>(
+        `/api/portfolio/transactions/${tx.id}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      // Refetch immediately so the row disappears from the table.
+      qc.invalidateQueries({ queryKey: ["tx"] });
+      qc.invalidateQueries({ queryKey: ["holdings"] });
+      qc.invalidateQueries({ queryKey: ["summary"] });
+      qc.invalidateQueries({ queryKey: ["dividends"] });
+      qc.invalidateQueries({ queryKey: ["allocation"] });
+
+      toast.show({
+        message: `Deleted ${tx.ticker_symbol || tx.type}.`,
+        actionLabel: "Undo",
+        durationMs: 10_000,
+        onAction: async () => {
+          try {
+            // Re-create from the snapshot. For dividend/buy/sell the
+            // server expects positive quantity + price; we already
+            // have those on the row. For interest/fee/transfer the
+            // server interprets `price` as the dollar amount, so we
+            // pass abs(amount) there.
+            const isCashOnly = ["interest", "fee", "transfer"].includes(tx.type);
+            await f("/api/portfolio/transactions/manual", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accountId: tx.account_id,
+                ticker: tx.ticker_symbol || "CASH",
+                date: tx.date,
+                type: tx.type,
+                quantity: isCashOnly ? 0 : Math.abs(tx.quantity ?? 0),
+                price: isCashOnly ? Math.abs(tx.amount ?? 0) : tx.price,
+                fees: tx.fees ?? 0,
+              }),
+            });
+            qc.invalidateQueries({ queryKey: ["tx"] });
+            qc.invalidateQueries({ queryKey: ["holdings"] });
+            qc.invalidateQueries({ queryKey: ["summary"] });
+            qc.invalidateQueries({ queryKey: ["dividends"] });
+            qc.invalidateQueries({ queryKey: ["allocation"] });
+            toast.show({
+              message: `Restored ${tx.ticker_symbol || tx.type}.`,
+              durationMs: 3_000,
+            });
+          } catch (err) {
+            toast.show({
+              message: `Couldn't undo: ${(err as Error).message}`,
+              durationMs: 6_000,
+            });
+          }
+        },
+      });
+    },
+    onError: (err) => {
+      toast.show({
+        message: `Couldn't delete: ${(err as Error).message}`,
+        durationMs: 6_000,
+      });
+    },
+  });
+
+  return (
+    <button
+      type="button"
+      onClick={() => del.mutate()}
+      disabled={del.isPending}
+      className="text-fg-muted hover:text-rose-400 text-sm"
+      title="Delete transaction"
+      aria-label="Delete transaction"
+    >
+      ×
+    </button>
+  );
 }

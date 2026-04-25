@@ -7,9 +7,12 @@ import { PreviewLandingPage } from "./pages/PreviewLandingPage";
 import { PreviewSignInPage } from "./pages/PreviewSignInPage";
 import { DemoPage } from "./pages/DemoPage";
 import { TermsPage, PrivacyPage } from "./pages/LegalPage";
+import { ContactPage } from "./pages/ContactPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { HoldingsPage } from "./pages/HoldingsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
+import { AddTransactionPage } from "./pages/AddTransactionPage";
+import { ToastProvider } from "./components/Toast";
 import { DividendsPage } from "./pages/DividendsPage";
 import { AllocationPage } from "./pages/AllocationPage";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -78,6 +81,7 @@ const APP_ROUTES: Array<{ path: string; element: React.ReactNode }> = [
   { path: "holdings", element: <HoldingsPage /> },
   { path: "stocks", element: <StocksPage /> },
   { path: "transactions", element: <TransactionsPage /> },
+  { path: "transactions/new", element: <AddTransactionPage /> },
   { path: "dividends", element: <DividendsPage /> },
   { path: "options", element: <OptionsPage /> },
   { path: "allocation", element: <AllocationPage /> },
@@ -89,6 +93,7 @@ export function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <ToastProvider>
         <Routes>
           {/* Public marketing routes */}
           <Route path="/" element={<RootRoute />} />
@@ -105,6 +110,7 @@ export function App() {
           {/* Legal */}
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/contact" element={<ContactPage />} />
 
           {/* Authenticated app routes — real accounts under /app */}
           {APP_ROUTES.map((r) => (
@@ -127,6 +133,7 @@ export function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );
