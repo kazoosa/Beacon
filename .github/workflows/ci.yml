@@ -1,0 +1,90 @@
+name: CI
+
+# Runs on every push to main and on every PR. Render and Vercel
+# auto-deploy on push to main independently — this workflow is the
+# guardrail that catches type errors / test failures / broken builds
+# BEFORE we notice them in production. A red CI doesn't block the
+# Render/Vercel deploy automatically (they listen to git, not to us)
+# — but it lights up the commit red and we get an email.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push cancels in-flight runs on the same branch — no point
+# wasting CI minutes on a commit that's already obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: finlink
+          POSTGRES_PASSWORD: finlink
+          POSTGRES_DB: finlink_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finlink -d finlink_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Vitest reads these. Schema is pushed in the prepare step.
+      DATABASE_URL: postgresql://finlink:finlink@localhost:5432/finlink_test
+      TEST_DATABASE_URL: postgresql://finlink:finlink@localhost:5432/finlink_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci_jwt_secret_ci_jwt_secret_ci_jwt
+      LINK_TOKEN_SECRET: ci_link_secret_ci_link_secret_ci_l
+      WEBHOOK_SIGNING_SECRET: ci_webhook_secret_ci_webhook_secret_ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build shared package
+        run: pnpm --filter @finlink/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @finlink/backend exec prisma generate
+
+      - name: Push schema to test DB
+        run: pnpm --filter @finlink/backend exec prisma db push --skip-generate
+
+      - name: Typecheck (all workspaces)
+        run: pnpm typecheck
+
+      - name: Test (backend)
+        run: pnpm test
+
+      - name: Build (all workspaces)
+        run: pnpm build
