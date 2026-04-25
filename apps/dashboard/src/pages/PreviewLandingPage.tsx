@@ -986,6 +986,7 @@ function Footer() {
           </a>
           <Link to="/terms"   className="hover:text-[var(--stripe-ink)] transition-colors">Terms</Link>
           <Link to="/privacy" className="hover:text-[var(--stripe-ink)] transition-colors">Privacy</Link>
+          <a href="mailto:kazoosa8@gmail.com" className="hover:text-[var(--stripe-ink)] transition-colors">Contact us</a>
           <Link to="/login"   className="hover:text-[var(--stripe-ink)] transition-colors">Sign in</Link>
         </div>
       </div>
