@@ -10,12 +10,27 @@ export type HistoryRange = "1d" | "5d" | "1mo" | "3mo" | "1y" | "max";
  * time we touch a stock endpoint. No auth header needed — the Yahoo
  * proxy is public read-only data.
  */
+/** Thrown when the response is HTML (Vite dev fallback) instead of JSON.
+ *  Components key off `code === "NOT_JSON"` to render a "local dev" hint
+ *  instead of a misleading $0.00. Cannot fire in production — Vercel
+ *  always returns application/json from the serverless functions. */
+export const NOT_JSON = "NOT_JSON";
+
 async function stocksFetch<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: { Accept: "application/json" } });
   if (!res.ok) {
     throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
   }
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    throw Object.assign(new Error("Response is not JSON"), { code: NOT_JSON });
+  }
   return (await res.json()) as T;
+}
+
+/** True when a query error is the local-dev no-serverless sentinel. */
+export function isLocalDevUnavailable(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === NOT_JSON;
 }
 
 export interface StockQuote {

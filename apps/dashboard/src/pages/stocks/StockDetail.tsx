@@ -25,6 +25,7 @@ import type {
   StockHistory,
   StockQuote,
 } from "../../lib/hooks/useStockMarket";
+import { isLocalDevUnavailable } from "../../lib/hooks/useStockMarket";
 import type {
   ActivityItem,
   ClosedLot,
@@ -245,6 +246,10 @@ function StockHeader({
         <div className="flex items-baseline gap-2 mt-1 flex-wrap">
           {quote.isLoading ? (
             <Skeleton className="w-24 h-7" />
+          ) : isLocalDevUnavailable(quote.error) ? (
+            <span className="text-sm text-fg-muted">
+              Live quote unavailable in local dev
+            </span>
           ) : (
             <>
               <span className="text-2xl font-num font-semibold text-fg-primary">
@@ -453,6 +458,8 @@ function HistoryChart({
       <div className="h-56 md:h-64">
         {history.isLoading ? (
           <Skeleton className="h-full" />
+        ) : isLocalDevUnavailable(history.error) ? (
+          <EmptyState message="Price history unavailable in local dev (no Vercel functions). Visit production for charts." />
         ) : data.length === 0 ? (
           <EmptyState message="Price history temporarily unavailable — live quote above is current." />
         ) : (
@@ -1238,6 +1245,8 @@ function HeadlinesPanel({ news }: { news: UseQueryResult<NewsResponse> }) {
       </div>
       {news.isLoading ? (
         <Skeleton className="h-40" />
+      ) : isLocalDevUnavailable(news.error) ? (
+        <EmptyState message="Headlines unavailable in local dev (no Vercel functions)." />
       ) : news.isError ? (
         <EmptyState message="Headlines unavailable right now." />
       ) : items.length === 0 ? (
