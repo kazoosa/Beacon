@@ -300,7 +300,7 @@ export function App() {
 
             <InfraCard
               icon={<Icon.Layers />}
-              title="Cache (Upstash Redis)"
+              title="Cache (Vercel Redis)"
               subtitle="Speeds up sessions + sync jobs"
               status={s.upstash?.status}
               hero={fmtNumber(s.upstash?.data?.commandsToday)}
@@ -318,8 +318,8 @@ export function App() {
                   value: bytesH(s.upstash?.data?.bandwidthBytes),
                 },
               ]}
-              link="https://console.upstash.com"
-              linkLabel="Upstash"
+              link="https://vercel.com/dashboard/stores"
+              linkLabel="Vercel"
             />
           </div>
 
