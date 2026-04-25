@@ -629,7 +629,12 @@ export default async function handler(req: Request): Promise<Response> {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "cache-control": "no-store",
+        // private = browsers cache, CDN doesn't (the response is keyed
+        // off the password header). max-age 30s lets a reload within
+        // half a minute return instantly. SWR 120s lets the browser
+        // serve stale data immediately while revalidating in the
+        // background — perceived performance win on the second click.
+        "cache-control": "private, max-age=30, stale-while-revalidate=120",
       },
     },
   );
