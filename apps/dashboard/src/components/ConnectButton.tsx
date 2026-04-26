@@ -53,6 +53,10 @@ export function ConnectButton() {
         skipped_labels?: string[];
         errors?: SyncError[];
         fully_succeeded?: boolean;
+        /** True between the first /sync call and the (possible) retry,
+         *  so the banner shows "Pulling history…" instead of misleading
+         *  zeros while we wait for SnapTrade's broker-side cold start. */
+        pending?: boolean;
       }
     | { ok: false; message: string }
     | null
@@ -133,21 +137,65 @@ export function ConnectButton() {
     }
   }
 
-  async function afterSnapTradeConnect() {
+  /**
+   * Run a single /api/snaptrade/sync call and surface the result.
+   * Extracted so afterSnapTradeConnect can call it twice with a delay
+   * in between when the first call comes back empty (see retry note).
+   */
+  async function runOneSync() {
+    return fetcher<{
+      connections: number;
+      accounts: number;
+      holdings: number;
+      transactions: number;
+      options_fetched?: number;
+      raw_activities?: number;
+      skipped_unknown?: number;
+      skipped_labels?: string[];
+      errors?: SyncError[];
+      fully_succeeded?: boolean;
+    }>("/api/snaptrade/sync", { method: "POST" });
+  }
+
+  /**
+   * Sync after a brokerage was just connected.
+   *
+   * `firstConnect=true` means this fires from SnapTradeReact's
+   * onSuccess (vs the Refresh button). Some brokers — Robinhood
+   * especially — lag 30-60s between authorizing the connection and
+   * having transaction history available via SnapTrade's API. If the
+   * first call returns transactions: 0, we wait and retry once before
+   * showing the result, so the user doesn't see a fake-empty banner
+   * and have to click Refresh.
+   */
+  async function afterSnapTradeConnect(firstConnect = false) {
     setSyncResult(null);
+    if (firstConnect) {
+      setSyncResult({
+        ok: true,
+        accounts: 0,
+        holdings: 0,
+        transactions: 0,
+        fully_succeeded: true,
+        // pending flag drives a "Pulling your history…" message in the
+        // banner so the user sees activity instead of an empty banner
+        // while we wait for SnapTrade to catch up.
+        pending: true,
+      });
+    }
     try {
-      const out = await fetcher<{
-        connections: number;
-        accounts: number;
-        holdings: number;
-        transactions: number;
-        options_fetched?: number;
-        raw_activities?: number;
-        skipped_unknown?: number;
-        skipped_labels?: string[];
-        errors?: SyncError[];
-        fully_succeeded?: boolean;
-      }>("/api/snaptrade/sync", { method: "POST" });
+      let out = await runOneSync();
+      // Retry-once on cold-start lag. Only on first connects, only
+      // when we got 0 transactions back. Capped at one retry so the
+      // user never waits more than ~10s total.
+      if (
+        firstConnect &&
+        (out.transactions ?? 0) === 0 &&
+        (out.raw_activities ?? 0) === 0
+      ) {
+        await new Promise((r) => setTimeout(r, 5_000));
+        out = await runOneSync();
+      }
       setSyncResult({
         ok: true,
         accounts: out.accounts ?? 0,
@@ -206,16 +254,37 @@ export function ConnectButton() {
 
       {syncResult?.ok === true && (
         (() => {
-          // Three banner states based on the backend response:
-          //   1. fully_succeeded === true              -> green "Sync complete"
-          //   2. fully_succeeded === false (partial)   -> amber "Partial sync"
-          //                                               with per-step error breakdown
-          //   3. fully_succeeded undefined (old build) -> green (back-compat)
+          // Four banner states based on the backend response:
+          //   1. pending === true                       -> blue "Pulling history…"
+          //                                                while we wait for SnapTrade
+          //                                                to catch up on first connect
+          //   2. fully_succeeded === true               -> green "Sync complete"
+          //   3. fully_succeeded === false (partial)    -> amber "Partial sync"
+          //                                                with per-step error breakdown
+          //   4. fully_succeeded undefined (old build)  -> green (back-compat)
+          const isPending = syncResult.pending === true;
           const isPartial = syncResult.fully_succeeded === false;
           const errs = syncResult.errors ?? [];
-          const tone = isPartial
-            ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-            : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+          const tone = isPending
+            ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+            : isPartial
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+          if (isPending) {
+            return (
+              <div
+                role="status"
+                className={`mt-3 rounded-md border p-2.5 text-[12px] leading-snug ${tone}`}
+              >
+                <div className="font-semibold">Pulling history…</div>
+                <div className="mt-1 opacity-90">
+                  Connection accepted. Some brokers (notably Robinhood) take
+                  up to a minute to expose transaction history after first
+                  connect — this banner will update as soon as the data arrives.
+                </div>
+              </div>
+            );
+          }
           return (
             <div
               role="status"
@@ -304,7 +373,7 @@ export function ConnectButton() {
         onSuccess={(id: unknown) => {
           console.log("SnapTrade connected:", id);
           syncFiredRef.current = true;
-          afterSnapTradeConnect();
+          afterSnapTradeConnect(true);
           setSnapLoginLink(null);
         }}
         onError={(err: unknown) => {
@@ -315,9 +384,13 @@ export function ConnectButton() {
         onExit={() => {
           // SnapTradeReact fires both onSuccess and onExit on a successful
           // connect. Without the ref guard we'd kick off two parallel
-          // /sync calls (~25s each) on every connect.
+          // /sync calls (~25s each) on every connect. onExit without
+          // a successful onSuccess means the user closed the modal
+          // mid-flow, possibly after adding an extra account — sync
+          // anyway, but as a "first connect" so the same retry-once
+          // logic applies.
           if (!syncFiredRef.current) {
-            afterSnapTradeConnect();
+            afterSnapTradeConnect(true);
           }
           syncFiredRef.current = false;
           setSnapLoginLink(null);
